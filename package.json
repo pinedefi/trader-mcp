@@ -1,0 +1,46 @@
+{
+  "name": "@lavarage/trader-mcp",
+  "version": "0.1.0",
+  "description": "Lavarage Trader MCP — hosted AI agent trading interface for Solana leveraged positions",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lavarage-trader-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "solana",
+    "defi",
+    "leverage",
+    "trading",
+    "ai-agent",
+    "lavarage"
+  ],
+  "author": "Lavarage <support@lavarage.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pinedefi/trader-mcp.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@privy-io/server-auth": "^1.32.5",
+    "@solana/web3.js": "^1.98.0",
+    "bs58": "^6.0.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
