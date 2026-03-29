@@ -22,12 +22,14 @@ if (!PRIVY_APP_ID || !PRIVY_APP_SECRET) {
 }
 
 const PUBLIC_URL = process.env.PUBLIC_URL ?? `http://localhost:${PORT}`
+const WEB_APP_URL = process.env.WEB_APP_URL ?? 'https://v2.lavarage.xyz'
 const maxPositionSol = Number(process.env.LAVARAGE_MAX_POSITION_SOL ?? '10')
 
 startServer({
   port: PORT,
   host: HOST,
   publicUrl: PUBLIC_URL,
+  webAppUrl: WEB_APP_URL,
   apiUrl: API_URL,
   apiKey: API_KEY,
   privyAppId: PRIVY_APP_ID,

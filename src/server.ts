@@ -18,6 +18,7 @@ export interface ServerConfig {
   port: number
   host: string
   publicUrl: string
+  webAppUrl: string
   apiUrl: string
   apiKey: string
   privyAppId: string
@@ -55,8 +56,8 @@ export async function startServer(config: ServerConfig) {
   app.use((req, res, next) => {
     const origin = req.headers.origin
     if (origin) {
-      // Allow requests from our public URL (auth page) and localhost (dev)
-      const allowed = origin === config.publicUrl || origin.startsWith('http://localhost')
+      // Allow requests from our public URL, web app, and localhost (dev)
+      const allowed = origin === config.publicUrl || origin === config.webAppUrl || origin.startsWith('http://localhost')
       if (allowed) {
         res.setHeader('Access-Control-Allow-Origin', origin)
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -159,14 +160,9 @@ export async function startServer(config: ServerConfig) {
       return
     }
 
-    res.send(renderAuthPage({
-      title: 'Connect Your Wallet',
-      showLogin: true,
-      privyAppId: config.privyAppId,
-      code,
-      nonce: auth.nonce,
-      publicUrl: config.publicUrl,
-    }))
+    // Redirect to the web app's /mcp-auth page for Privy login + delegation
+    const redirectUrl = `${config.webAppUrl}/mcp-auth?code=${code}&callback=${encodeURIComponent(config.publicUrl)}&nonce=${auth.nonce}`
+    res.redirect(302, redirectUrl)
   })
 
   // Auth completion — wallet signature or Privy token
@@ -232,7 +228,8 @@ export async function startServer(config: ServerConfig) {
           return
         }
 
-        completeDeviceAuth(code, `wallet:${walletAddress}`, walletAddress)
+        const { mode, walletId } = req.body
+        completeDeviceAuth(code, `wallet:${walletAddress}`, walletAddress, mode, walletId)
         res.json({ success: true, wallet: walletAddress })
 
       } else if (type === 'privy') {
@@ -256,7 +253,8 @@ export async function startServer(config: ServerConfig) {
           return
         }
 
-        completeDeviceAuth(code, claims.userId, solanaWallet.address)
+        const { mode, walletId } = req.body
+        completeDeviceAuth(code, claims.userId, solanaWallet.address, mode, walletId)
         res.json({ success: true, wallet: solanaWallet.address })
 
       } else {
@@ -280,7 +278,7 @@ export async function startServer(config: ServerConfig) {
     }
 
     if (auth.walletAddress) {
-      res.json({ status: 'complete', wallet: auth.walletAddress, userId: auth.privyUserId })
+      res.json({ status: 'complete', wallet: auth.walletAddress, userId: auth.privyUserId, mode: auth.mode, walletId: auth.walletId })
     } else {
       res.json({ status: 'pending' })
     }

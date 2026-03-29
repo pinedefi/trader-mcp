@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { createSession, getSession } from '../session.js'
+import { createSession, getSession, updateSessionMode } from '../session.js'
 import { createDeviceCode, getDeviceAuth, deleteDeviceCode } from '../device-auth.js'
 import type { ServerConfig } from '../server.js'
 
@@ -71,13 +71,18 @@ Call this tool again after opening the URL to check if login is complete.`,
 
           if (auth.walletAddress && auth.privyUserId) {
             // Delete code BEFORE creating session (#24 — atomic to prevent double-claim)
+            const completedMode = auth.mode ?? null
             deleteDeviceCode(checkCode)
             createSession(sessionId, {
               privyUserId: auth.privyUserId,
               walletAddress: auth.walletAddress,
-              mode: null,
+              mode: completedMode,
               createdAt: new Date(),
             })
+
+            const modeMsg = completedMode
+              ? `Trading mode: ${completedMode}. You're ready to trade!`
+              : 'Run lavarage_setup to choose your trading mode ("unsigned" or "server-wallet").'
 
             return {
               content: [{
@@ -85,7 +90,8 @@ Call this tool again after opening the URL to check if login is complete.`,
                 text: JSON.stringify({
                   status: 'authenticated',
                   wallet: auth.walletAddress,
-                  message: `Authenticated as ${auth.walletAddress}. Now run lavarage_setup to choose your trading mode ("unsigned" or "server-wallet").`,
+                  mode: completedMode,
+                  message: `Authenticated as ${auth.walletAddress}. ${modeMsg}`,
                 }, null, 2),
               }],
             }

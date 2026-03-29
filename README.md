@@ -1,6 +1,6 @@
 # @lavarage/trader-mcp
 
-Hosted MCP server for trading leveraged positions on [Lavarage](https://lavarage.xyz) via AI agents (Claude, Cursor, GPT, custom agents).
+Hosted MCP server for trading leveraged positions on [Lavarage](https://v2.lavarage.xyz) via AI agents (Claude, Cursor, GPT, custom agents).
 
 ## How It Works
 

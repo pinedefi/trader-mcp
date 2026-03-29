@@ -20,6 +20,10 @@ export interface DeviceAuth {
   expiresAt: number
   privyUserId?: string
   walletAddress?: string
+  /** Trading mode chosen during auth flow */
+  mode?: 'unsigned' | 'server-wallet'
+  /** Privy wallet ID for server-wallet delegation */
+  walletId?: string
 }
 
 const CODE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -76,11 +80,13 @@ export function getDeviceAuth(code: string): DeviceAuth | undefined {
   return auth
 }
 
-export function completeDeviceAuth(code: string, privyUserId: string, walletAddress: string): void {
+export function completeDeviceAuth(code: string, privyUserId: string, walletAddress: string, mode?: 'unsigned' | 'server-wallet', walletId?: string): void {
   const auth = deviceCodes.get(code)
   if (auth) {
     auth.privyUserId = privyUserId
     auth.walletAddress = walletAddress
+    auth.mode = mode
+    auth.walletId = walletId
   }
 }
 
