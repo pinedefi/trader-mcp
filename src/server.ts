@@ -10,6 +10,7 @@ import {
   getAuthServerMetadata, getProtectedResourceMetadata,
 } from './oauth.js'
 import { renderAuthPage, renderAuthorizeCallbackPage } from './auth-page.js'
+import { renderLandingPage } from './landing-page.js'
 import { registerSetupTool } from './tools/setup.js'
 import { registerLoginTool } from './tools/login.js'
 import { registerMarketTools } from './tools/market.js'
@@ -372,8 +373,12 @@ export async function startServer(config: ServerConfig) {
   })
 
   // =============================================
-  // Health
+  // Landing + Health
   // =============================================
+
+  app.get('/', (_req, res) => {
+    res.send(renderLandingPage(config.publicUrl))
+  })
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' })
