@@ -16,8 +16,12 @@ export function registerManageTools(
     'lavarage_partial_sell',
     `Sell a portion of a position (take partial profit). Specify what percentage to sell.
 
-In "unsigned" mode: returns unsigned split + close transactions.
-In "server-wallet" mode: signs and submits automatically.`,
+This is a two-step operation: split the position, then close the split portion.
+
+In "unsigned" mode: returns both unsigned transactions (split + close). Submit them sequentially — split first, then close.
+In "server-wallet" mode: signs and submits both transactions sequentially.
+
+If the close step fails after the split succeeds, you will have two separate positions (the original reduced portion and the split portion). This is safe — no funds are lost. Simply call lavarage_close_position on the split portion to complete the sale, or keep it as a separate position.`,
     {
       positionAddress: z.string().describe('The position account address (base58)'),
       sellPercent: z.number().min(1).max(99).describe('Percentage of position to sell (e.g. 50 = sell half)'),
