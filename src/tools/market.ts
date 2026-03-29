@@ -50,9 +50,12 @@ Examples: "SOL", "BONK", "JUP", "USDC"`,
 
   server.tool(
     'lavarage_get_rates',
-    `Get lending rates and available liquidity for leverage trading. Returns the top 20 offers sorted by available liquidity.
+    `Get available offers for leverage trading, sorted by liquidity. Each offer represents a lending pool you can trade against.
 
-Optionally filter by token mint address or quote currency.`,
+An offer defines: the token pair (e.g. SOL→cbBTC), max leverage, borrow APR, and available liquidity. Pass the offerPublicKey to lavarage_get_quote or lavarage_open_position.
+
+To go LONG on a token: find an offer where that token is the output (tokenSymbol). You deposit the quote currency (SOL/USDC) and receive the token.
+To go SHORT: find an offer where the token you want to short is the input.`,
     {
       tokenMint: z.string().optional().describe('Filter by base token mint address'),
       quoteCurrency: z.enum(['SOL', 'USDC', 'all']).optional().default('all').describe('Filter by quote currency (default: all)'),

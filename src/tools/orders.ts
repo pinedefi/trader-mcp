@@ -8,7 +8,15 @@ export function registerOrderTools(
 ) {
   server.tool(
     'lavarage_set_tp_sl',
-    'Set a take-profit or stop-loss order on a position. The order will auto-execute when the trigger price is hit.',
+    `Set a take-profit or stop-loss order on a position. The order auto-executes when the trigger price is hit.
+
+TAKE_PROFIT: closes the position when price reaches your target (locks in profit).
+  - For LONG: set trigger ABOVE entry price (e.g. entry $100, TP at $120)
+  - For SHORT: set trigger BELOW entry price (e.g. entry $100, TP at $80)
+
+STOP_LOSS: closes the position to limit losses.
+  - For LONG: set trigger BELOW entry price (e.g. entry $100, SL at $90)
+  - For SHORT: set trigger ABOVE entry price (e.g. entry $100, SL at $110)`,
     {
       positionAddress: z.string().describe('The position account address (base58)'),
       orderType: z.enum(['TAKE_PROFIT', 'STOP_LOSS']).describe('Order type'),

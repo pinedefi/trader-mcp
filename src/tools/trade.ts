@@ -17,6 +17,13 @@ export function registerTradeTools(
     'lavarage_open_position',
     `Open a new leveraged trading position on Lavarage.
 
+Position types (determined by the offer you choose):
+- LONG: Bet the token price goes UP. You deposit SOL/USDC as collateral, borrow more, and buy the token. Profit if price rises.
+- SHORT: Bet the token price goes DOWN. You deposit the token, borrow against it, and sell. Profit if price falls.
+- BORROW: Simply borrow tokens against collateral. No directional bet — used for yield strategies.
+
+The offer determines the side and token pair. Use lavarage_get_rates to find offers.
+
 In "unsigned" mode: returns the unsigned transaction (base64) for you to sign and submit.
 In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.
 
@@ -96,6 +103,12 @@ Collateral can be in SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values und
   server.tool(
     'lavarage_close_position',
     `Close an existing leveraged position on Lavarage.
+
+For LONG positions: sells the token back, repays the borrow, returns remaining collateral + profit (or minus loss).
+For SHORT positions: buys the token back, returns it, keeps the difference.
+For BORROW positions: use lavarage_repay instead.
+
+Tip: call lavarage_close_quote first to preview PnL before closing.
 
 In "unsigned" mode: returns the unsigned transaction (base64) for you to sign and submit.
 In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.`,

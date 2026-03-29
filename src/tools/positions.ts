@@ -8,7 +8,10 @@ export function registerPositionTools(
 ) {
   server.tool(
     'lavarage_list_positions',
-    'List your open or closed leveraged positions on Lavarage. Shows PnL, leverage, liquidation price, and more for each position.',
+    `List your open or closed leveraged positions on Lavarage.
+
+Position sides: LONG (betting price goes up), SHORT (betting price goes down), BORROW (borrowed tokens, no directional bet).
+Status: OPEN/EXECUTED = active position, CLOSED = settled.`,
     {
       status: z.enum(['OPEN', 'CLOSED', 'ALL']).optional().default('OPEN')
         .describe('Filter by position status (default: OPEN)'),
