@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { config } from 'dotenv'
+config() // Load .env file
+
 import { startServer } from './server.js'
 
 const PORT = Number(process.env.PORT ?? 3100)
