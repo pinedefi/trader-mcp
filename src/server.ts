@@ -3,7 +3,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import { LavaApiClient } from './api-client.js'
 import { createSession, createTransport, deleteSession, getSession, validateSessionSecret, type TradingMode } from './session.js'
-import { createDeviceCode, getDeviceAuth, completeDeviceAuth, deleteDeviceCode, type DeviceAuth } from './device-auth.js'
+import { createDeviceCode, getDeviceAuth, completeDeviceAuth, deleteDeviceCode } from './device-auth.js'
+import { renderAuthPage } from './auth-page.js'
 import { registerSetupTool } from './tools/setup.js'
 import { registerLoginTool } from './tools/login.js'
 import { registerMarketTools } from './tools/market.js'
@@ -80,70 +81,140 @@ export async function startServer(config: ServerConfig) {
 
   // --- Device Auth Flow ---
 
-  // Step 1: lavarage_login tool calls this internally to create a device code
-  // (handled in device-auth.ts, no HTTP endpoint needed)
-
   // Step 2: Trader opens this page in their browser to authenticate
-  app.get('/auth/:code', (_req, res) => {
-    const code = _req.params.code
+  app.get('/auth/:code', (req, res) => {
+    const code = req.params.code
     const auth = getDeviceAuth(code)
 
     if (!auth) {
-      res.status(404).send(authPage('Link Expired', 'This login link has expired or is invalid. Go back to your AI agent and run lavarage_login again.', false))
+      res.send(renderAuthPage({
+        title: 'Link Expired',
+        message: 'This login link has expired or is invalid. Go back to your AI agent and run lavarage_login again.',
+        showLogin: false,
+      }))
       return
     }
 
     if (auth.walletAddress) {
-      res.send(authPage('Already Connected', `Wallet ${auth.walletAddress} is already connected. You can close this tab.`, false))
+      res.send(renderAuthPage({
+        title: 'Already Connected',
+        message: `Wallet ${auth.walletAddress} is already connected. You can close this tab.`,
+        showLogin: false,
+      }))
       return
     }
 
-    // Serve the Privy login page
-    res.send(authPage('Connect Your Wallet', '', true, config.privyAppId, code, config.publicUrl))
+    res.send(renderAuthPage({
+      title: 'Connect Your Wallet',
+      showLogin: true,
+      privyAppId: config.privyAppId,
+      code,
+      publicUrl: config.publicUrl,
+    }))
   })
 
-  // Step 3: After Privy login, the browser posts the wallet address back
+  // Step 3: Browser posts wallet credentials after auth
+  // Supports two auth types:
+  //   { type: "wallet", walletAddress, signature, message }  — direct wallet connect
+  //   { type: "privy", privyToken }                          — Privy OAuth
   app.post('/auth/:code/complete', async (req, res) => {
     const code = req.params.code
-    const { privyToken } = req.body
-
-    if (!privyToken) {
-      res.status(400).json({ error: 'privyToken is required' })
-      return
-    }
-
     const auth = getDeviceAuth(code)
+
     if (!auth) {
       res.status(404).json({ error: 'Code expired or invalid' })
       return
     }
 
+    if (auth.walletAddress) {
+      res.json({ success: true, wallet: auth.walletAddress })
+      return
+    }
+
+    const { type } = req.body
+
     try {
-      // Verify the Privy token and extract wallet
-      const { PrivyClient } = await import('@privy-io/server-auth')
-      const client = new PrivyClient(config.privyAppId, config.privyAppSecret)
-      const claims = await client.verifyAuthToken(privyToken)
-      const user = await client.getUser(claims.userId)
+      if (type === 'wallet') {
+        // Direct wallet signature verification
+        const { walletAddress, signature, message } = req.body
 
-      const solanaWallet = user.linkedAccounts.find(
-        (a: any) => a.type === 'wallet' && a.chainType === 'solana',
-      )
+        if (!walletAddress || !signature || !message) {
+          res.status(400).json({ error: 'walletAddress, signature, and message are required' })
+          return
+        }
 
-      if (!solanaWallet || !('address' in solanaWallet)) {
-        res.status(400).json({ error: 'No Solana wallet linked to this Privy account' })
-        return
+        // Verify the message contains the correct code
+        if (!message.includes(`Code: ${code}`)) {
+          res.status(400).json({ error: 'Message does not match this auth code' })
+          return
+        }
+
+        // Verify ed25519 signature using Node's native crypto
+        const { PublicKey } = await import('@solana/web3.js')
+        const crypto = await import('node:crypto')
+
+        const pubkey = new PublicKey(walletAddress)
+        const msgBytes = Buffer.from(message, 'utf-8')
+        const sigBytes = Buffer.from(signature, 'base64')
+
+        // Create an ed25519 public key object from raw bytes
+        const keyObject = crypto.createPublicKey({
+          key: Buffer.concat([
+            // ed25519 DER prefix (ASN.1 header for 32-byte ed25519 public key)
+            Buffer.from('302a300506032b6570032100', 'hex'),
+            Buffer.from(pubkey.toBytes()),
+          ]),
+          format: 'der',
+          type: 'spki',
+        })
+
+        const valid = crypto.verify(null, msgBytes, keyObject, sigBytes)
+
+        if (!valid) {
+          res.status(401).json({ error: 'Invalid wallet signature' })
+          return
+        }
+
+        completeDeviceAuth(code, `wallet:${walletAddress}`, walletAddress)
+        res.json({ success: true, wallet: walletAddress })
+
+      } else if (type === 'privy') {
+        // Privy token verification
+        const { privyToken } = req.body
+
+        if (!privyToken) {
+          res.status(400).json({ error: 'privyToken is required' })
+          return
+        }
+
+        const { PrivyClient } = await import('@privy-io/server-auth')
+        const client = new PrivyClient(config.privyAppId, config.privyAppSecret)
+        const claims = await client.verifyAuthToken(privyToken)
+        const user = await client.getUser(claims.userId)
+
+        const solanaWallet = user.linkedAccounts.find(
+          (a: any) => a.type === 'wallet' && a.chainType === 'solana',
+        )
+
+        if (!solanaWallet || !('address' in solanaWallet)) {
+          res.status(400).json({ error: 'No Solana wallet linked to this Privy account' })
+          return
+        }
+
+        completeDeviceAuth(code, claims.userId, solanaWallet.address)
+        res.json({ success: true, wallet: solanaWallet.address })
+
+      } else {
+        res.status(400).json({ error: 'Invalid auth type. Use "wallet" or "privy".' })
       }
-
-      completeDeviceAuth(code, claims.userId, solanaWallet.address)
-      res.json({ success: true, wallet: solanaWallet.address })
     } catch (err: any) {
       res.status(401).json({ error: `Auth failed: ${err.message}` })
     }
   })
 
-  // Step 4: lavarage_login tool polls this to check if the user completed auth
-  app.get('/auth/:code/status', (_req, res) => {
-    const code = _req.params.code
+  // Step 4: lavarage_login tool polls this to check if auth completed
+  app.get('/auth/:code/status', (req, res) => {
+    const code = req.params.code
     const auth = getDeviceAuth(code)
 
     if (!auth) {
@@ -173,59 +244,6 @@ export async function startServer(config: ServerConfig) {
     console.log(`  Auth page: /auth/:code`)
     console.log(`  Health: /health`)
   })
-}
-
-function authPage(title: string, message: string, showLogin: boolean, privyAppId?: string, code?: string, publicUrl?: string): string {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lavarage - ${title}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e5e5e5; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .container { text-align: center; max-width: 400px; padding: 2rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
-    p { color: #999; margin-bottom: 1.5rem; line-height: 1.5; }
-    .btn { background: #7c3aed; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 1rem; cursor: pointer; }
-    .btn:hover { background: #6d28d9; }
-    .success { color: #22c55e; }
-    #status { margin-top: 1rem; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>${title}</h1>
-    ${message ? `<p>${message}</p>` : ''}
-    ${showLogin ? `
-    <p>Connect your Solana wallet to start trading with your AI agent.</p>
-    <div id="privy-login">
-      <button class="btn" onclick="startLogin()">Connect Wallet</button>
-    </div>
-    <div id="status"></div>
-    <script src="https://unpkg.com/@privy-io/js-sdk-core@latest/dist/umd/index.js"></script>
-    <script>
-      const CODE = '${code}';
-      const PUBLIC_URL = '${publicUrl}';
-      const PRIVY_APP_ID = '${privyAppId}';
-
-      async function startLogin() {
-        document.getElementById('status').innerHTML = '<p>Opening wallet connection...</p>';
-        try {
-          // Use Privy's headless SDK to authenticate
-          const privy = new window.PrivyJs.PrivyClient({ appId: PRIVY_APP_ID });
-          // Redirect to Privy's hosted login
-          window.location.href = 'https://auth.privy.io/login?app_id=' + PRIVY_APP_ID + '&redirect_uri=' + encodeURIComponent(PUBLIC_URL + '/auth/' + CODE + '/callback');
-        } catch (err) {
-          document.getElementById('status').innerHTML = '<p style="color:#ef4444">Error: ' + err.message + '</p>';
-        }
-      }
-    </script>
-    ` : ''}
-  </div>
-</body>
-</html>`
 }
 
 
