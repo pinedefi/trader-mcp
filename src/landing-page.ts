@@ -79,6 +79,30 @@ export function renderLandingPage(publicUrl: string): string {
     .tools-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #111; color: #aaa; }
     .tools-table td:first-child { color: #ddd; font-family: 'SF Mono', monospace; font-size: 0.8rem; }
 
+    /* Install cards */
+    .install-card {
+      background: #111; border: 1px solid #222; border-radius: 12px;
+      padding: 1.25rem; margin-bottom: 1rem;
+    }
+    .install-header { margin-bottom: 0.75rem; }
+    .install-header h3 { font-size: 1rem; color: #fff; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+    .install-header p { font-size: 0.85rem; color: #666; }
+    .install-prompt {
+      background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 8px;
+      padding: 0.75rem 1rem; cursor: pointer; position: relative;
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      transition: border-color 0.15s;
+    }
+    .install-prompt:hover { border-color: #333; }
+    .install-text { flex: 1; font-size: 0.8rem; color: #aaa; line-height: 1.5; }
+    .copy-btn {
+      flex-shrink: 0; font-size: 0.7rem; padding: 0.25rem 0.5rem;
+      border-radius: 4px; background: #222; color: #888; border: 1px solid #333;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .copy-btn:hover { background: #333; color: #ccc; }
+    .copy-btn.copied { background: #22C55E22; color: #22C55E; border-color: #22C55E44; }
+
     /* Footer */
     .footer { text-align: center; padding-top: 2rem; border-top: 1px solid #1a1a1a; color: #444; font-size: 0.8rem; }
   </style>
@@ -94,30 +118,41 @@ export function renderLandingPage(publicUrl: string): string {
       </div>
     </div>
 
-    <!-- Modes -->
+    <!-- Quick Install -->
     <div class="section">
-      <h2>Two Ways to Connect</h2>
-      <div class="mode-grid">
-        <div class="mode-card">
-          <h3>Hosted Mode</h3>
-          <p>Connect to our server. Log in with email, we handle signing via Privy wallet delegation. Zero setup.</p>
-          <span class="mode-tag hosted">OAuth + Privy</span>
+      <h2>Quick Install</h2>
+      <p>Open Claude Code (or Claude Desktop) and paste one of these. Claude does the rest.</p>
+
+      <div class="install-card">
+        <div class="install-header">
+          <h3>Hosted Mode <span class="mode-tag hosted">Recommended</span></h3>
+          <p>We handle wallet creation and signing. Just log in with email.</p>
         </div>
-        <div class="mode-card">
-          <h3>Local Mode</h3>
-          <p>Run on your machine with your own Solana keypair. Full custody. Transactions returned unsigned for you to sign.</p>
-          <span class="mode-tag local">stdio + keypair</span>
+        <div class="install-prompt" onclick="copyToClipboard(this)">
+          <span class="install-text">Install Lavarage MCP: add a "lavarage" MCP server to the project .mcp.json with type "http" and url "${publicUrl}/mcp". That's it — the OAuth flow will handle authentication when I use any trading tool.</span>
+          <span class="copy-btn" title="Click to copy">Copy</span>
+        </div>
+      </div>
+
+      <div class="install-card">
+        <div class="install-header">
+          <h3>Local Mode <span class="mode-tag local">Self-custody</span></h3>
+          <p>Run on your machine with your own Solana keypair. Full control.</p>
+        </div>
+        <div class="install-prompt" onclick="copyToClipboard(this)">
+          <span class="install-text">Install Lavarage MCP: run \`npm install -g @lavarage/trader-mcp\` then add a "lavarage" MCP server to my Claude config with command "lavarage-trader-mcp-local" and env vars LAVARAGE_API_URL="https://api.lavarage.xyz", LAVARAGE_API_KEY (ask me for my key), and LAVARAGE_KEYPAIR_PATH (ask me for my keypair path). Transactions will be returned unsigned for me to sign.</span>
+          <span class="copy-btn" title="Click to copy">Copy</span>
         </div>
       </div>
     </div>
 
-    <!-- Hosted Setup -->
+    <!-- Manual Config -->
     <div class="section">
-      <h2>Hosted Mode Setup</h2>
-      <p>Add this to your Claude Desktop or Claude Code config:</p>
+      <h2>Manual Config</h2>
+      <p>If you prefer to edit the config files directly:</p>
+
+      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Hosted — .mcp.json</h3>
       <div class="code-block">
-        <span class="comment">// Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json</span><br>
-        <span class="comment">// Claude Code: .mcp.json in your project root</span><br><br>
         {<br>
         &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
         &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"lavarage"</span>: {<br>
@@ -127,19 +162,9 @@ export function renderLandingPage(publicUrl: string): string {
         &nbsp;&nbsp;}<br>
         }
       </div>
-      <p>Your AI agent will open a browser window for you to log in with email. After that, it can trade on your behalf.</p>
-    </div>
 
-    <!-- Local Setup -->
-    <div class="section">
-      <h2>Local Mode Setup</h2>
-      <p>Install globally or use npx. Requires Node.js 20+ and a Solana keypair.</p>
+      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Local — claude_desktop_config.json</h3>
       <div class="code-block">
-        <span class="comment"># Install</span><br>
-        npm install -g @lavarage/trader-mcp
-      </div>
-      <div class="code-block">
-        <span class="comment">// Claude Desktop config</span><br><br>
         {<br>
         &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
         &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"lavarage"</span>: {<br>
@@ -153,7 +178,6 @@ export function renderLandingPage(publicUrl: string): string {
         &nbsp;&nbsp;}<br>
         }
       </div>
-      <p>Transactions are returned unsigned. Sign them with your keypair or submit via your own tooling.</p>
     </div>
 
     <!-- Tools -->
@@ -205,6 +229,17 @@ export function renderLandingPage(publicUrl: string): string {
       <p style="margin-top: 0.5rem;"><a href="https://github.com/pinedefi/trader-mcp">GitHub</a> · <a href="https://docs.lavarage.xyz">API Docs</a></p>
     </div>
   </div>
+  <script>
+    function copyToClipboard(el) {
+      const text = el.querySelector('.install-text').textContent.trim();
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = el.querySelector('.copy-btn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+  </script>
 </body>
 </html>`
 }
