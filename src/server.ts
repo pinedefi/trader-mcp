@@ -296,56 +296,62 @@ export async function startServer(config: ServerConfig) {
   }
 
   app.post('/mcp', async (req, res) => {
-    const auth = authenticateRequest(req)
+    try {
+      const auth = authenticateRequest(req)
+      const sessionId = req.headers['mcp-session-id'] as string | undefined
 
-    // Check for existing session
-    const sessionId = req.headers['mcp-session-id'] as string | undefined
+      console.log(`POST /mcp sessionId=${sessionId ?? 'NEW'} auth=${auth ? auth.walletAddress : 'none'}`)
 
-    if (sessionId && mcpTransports.has(sessionId)) {
-      const transport = mcpTransports.get(sessionId)!
+      if (sessionId && mcpTransports.has(sessionId)) {
+        const transport = mcpTransports.get(sessionId)!
 
-      // Ensure session exists for authenticated users
-      if (auth && !getSession(sessionId)) {
-        createSession(sessionId, {
-          privyUserId: auth.privyUserId,
-          walletAddress: auth.walletAddress,
-          mode: (auth.mode as TradingMode) ?? null,
-          createdAt: new Date(),
-        })
+        if (auth && !getSession(sessionId)) {
+          createSession(sessionId, {
+            privyUserId: auth.privyUserId,
+            walletAddress: auth.walletAddress,
+            mode: (auth.mode as TradingMode) ?? null,
+            createdAt: new Date(),
+          })
+        }
+
+        await transport.handleRequest(req, res)
+        return
       }
 
+      // New session
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+      })
+
+      transport.onclose = () => {
+        const sid = transport.sessionId
+        if (sid) {
+          mcpTransports.delete(sid)
+          deleteSession(sid)
+        }
+      }
+
+      const mcpServer = createMcpServer(transport, config)
+      await mcpServer.connect(transport)
       await transport.handleRequest(req, res)
-      return
-    }
 
-    // New session
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
-    })
+      if (transport.sessionId) {
+        console.log(`MCP session created: ${transport.sessionId} wallet=${auth?.walletAddress ?? 'none'}`)
+        mcpTransports.set(transport.sessionId, transport)
 
-    transport.onclose = () => {
-      const sid = transport.sessionId
-      if (sid) {
-        mcpTransports.delete(sid)
-        deleteSession(sid)
+        if (auth) {
+          createSession(transport.sessionId, {
+            privyUserId: auth.privyUserId,
+            walletAddress: auth.walletAddress,
+            mode: (auth.mode as TradingMode) ?? null,
+            createdAt: new Date(),
+          })
+        }
       }
-    }
-
-    const mcpServer = createMcpServer(transport, config)
-    await mcpServer.connect(transport)
-    await transport.handleRequest(req, res)
-
-    if (transport.sessionId) {
-      mcpTransports.set(transport.sessionId, transport)
-
-      // Create session for authenticated users
-      if (auth) {
-        createSession(transport.sessionId, {
-          privyUserId: auth.privyUserId,
-          walletAddress: auth.walletAddress,
-          mode: (auth.mode as TradingMode) ?? null,
-          createdAt: new Date(),
-        })
+    } catch (err: any) {
+      console.error('POST /mcp error:', err)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'internal_error', message: err.message })
       }
     }
   })
