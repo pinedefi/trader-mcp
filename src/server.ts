@@ -84,23 +84,21 @@ export async function startServer(config: ServerConfig) {
     return entry.count <= limit
   }
 
-  // --- OAuth opt-out ---
-  // Claude Code probes these before connecting. Return proper responses
-  // so it knows auth is not required.
+  // --- OAuth endpoints ---
+  // Claude Code probes these before connecting. The /mcp endpoint itself
+  // never returns 401, so the client should skip auth. But we handle
+  // these explicitly to avoid Express HTML error pages.
 
-  // OAuth Protected Resource metadata — return 404 to signal "no auth"
   app.get('/.well-known/oauth-protected-resource', (_req, res) => {
-    res.status(404).end()
+    res.status(404).json({ error: 'not_found', error_description: 'This server does not require authentication' })
   })
 
-  // OAuth Authorization Server metadata — return 404
   app.get('/.well-known/oauth-authorization-server', (_req, res) => {
-    res.status(404).end()
+    res.status(404).json({ error: 'not_found' })
   })
 
-  // Dynamic Client Registration — return 404
   app.post('/register', (_req, res) => {
-    res.status(404).end()
+    res.status(404).json({ error: 'registration_not_supported', error_description: 'This server does not require authentication' })
   })
 
   // Track active transports by session ID
