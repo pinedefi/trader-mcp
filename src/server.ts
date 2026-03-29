@@ -23,9 +23,9 @@ export interface ServerConfig {
   maxPositionSol: number
 }
 
-// Lazy-loaded singleton PrivyClient (#8, #11)
+// Lazy-loaded singleton PrivyClient — shared across all auth + trade calls
 let privyClientInstance: any = null
-async function getPrivyClient(config: ServerConfig) {
+export async function getPrivyClient(config: ServerConfig) {
   if (!privyClientInstance) {
     const { PrivyClient } = await import('@privy-io/server-auth')
     const opts = config.privySigningKey

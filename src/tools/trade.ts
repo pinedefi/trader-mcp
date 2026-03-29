@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { VersionedTransaction } from '@solana/web3.js'
 import type { LavaApiClient } from '../api-client.js'
 import type { TradingMode } from '../session.js'
-import type { ServerConfig } from '../server.js'
+import { getPrivyClient, type ServerConfig } from '../server.js'
 
 export function registerTradeTools(
   server: McpServer,
@@ -168,7 +168,6 @@ function requireMode(mode: TradingMode | null): TradingMode {
   return mode
 }
 
-// Uses the singleton PrivyClient from server.ts (#8)
 async function signAndSubmitViaPrivy(
   transactionBase64: string,
   walletAddress: string,
@@ -178,12 +177,7 @@ async function signAndSubmitViaPrivy(
     throw new Error('Server-wallet mode requires PRIVY_SIGNING_KEY to be configured.')
   }
 
-  // Import the singleton getter
-  const { PrivyClient } = await import('@privy-io/server-auth')
-  // TODO: Use shared singleton once module export is wired up
-  const privyClient = new PrivyClient(config.privyAppId, config.privyAppSecret, {
-    walletApi: { authorizationPrivateKey: config.privySigningKey },
-  })
+  const privyClient = await getPrivyClient(config)
 
   const txBuffer = Buffer.from(transactionBase64, 'base64')
   const tx = VersionedTransaction.deserialize(txBuffer)
