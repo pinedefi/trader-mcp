@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "lavarage-trader-mcp": "dist/index.js"
+    "lavarage-trader-mcp": "dist/index.js",
+    "lavarage-trader-mcp-local": "dist/local.js"
   },
   "scripts": {
     "build": "tsc",

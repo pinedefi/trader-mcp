@@ -2,9 +2,14 @@ import express from 'express'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { LavaApiClient } from './api-client.js'
-import { createSession, createTransport, deleteSession, getSession, validateSessionSecret, type TradingMode } from './session.js'
-import { createDeviceCode, getDeviceAuth, completeDeviceAuth, deleteDeviceCode, buildChallengeMessage } from './device-auth.js'
-import { renderAuthPage } from './auth-page.js'
+import { createSession, deleteSession, getSession, type TradingMode } from './session.js'
+import {
+  registerClient, getClient as getOAuthClient,
+  createAuthCode, getAuthCode, completeAuthCode, consumeAuthCode,
+  createAccessToken, validateAccessToken, verifyPKCE,
+  getAuthServerMetadata, getProtectedResourceMetadata,
+} from './oauth.js'
+import { renderAuthPage, renderAuthorizeCallbackPage } from './auth-page.js'
 import { registerSetupTool } from './tools/setup.js'
 import { registerLoginTool } from './tools/login.js'
 import { registerMarketTools } from './tools/market.js'
@@ -43,6 +48,7 @@ export async function getPrivyClient(config: ServerConfig) {
 export async function startServer(config: ServerConfig) {
   const app = express()
   app.use(express.json())
+  app.use(express.urlencoded({ extended: true }))
 
   // Request logging
   app.use((req, _res, next) => {
@@ -60,7 +66,7 @@ export async function startServer(config: ServerConfig) {
       if (allowed) {
         res.setHeader('Access-Control-Allow-Origin', origin)
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, x-session-secret')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, Mcp-Session-Id')
         res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id')
       }
     }
@@ -71,7 +77,7 @@ export async function startServer(config: ServerConfig) {
     next()
   })
 
-  // Simple rate limiter
+  // Rate limiter
   const rateLimits = new Map<string, { count: number; resetAt: number }>()
   function rateLimit(ip: string, limit: number, windowMs: number): boolean {
     const now = Date.now()
@@ -84,41 +90,232 @@ export async function startServer(config: ServerConfig) {
     return entry.count <= limit
   }
 
-  // --- OAuth endpoints ---
-  // Claude Code probes these before connecting. The /mcp endpoint itself
-  // never returns 401, so the client should skip auth. But we handle
-  // these explicitly to avoid Express HTML error pages.
+  // =============================================
+  // OAuth 2.1 Endpoints
+  // =============================================
 
+  // Protected Resource Metadata (RFC 9728)
   app.get('/.well-known/oauth-protected-resource', (_req, res) => {
-    res.status(404).json({ error: 'not_found', error_description: 'This server does not require authentication' })
+    res.json(getProtectedResourceMetadata(config.publicUrl))
   })
 
+  // Authorization Server Metadata (RFC 8414)
   app.get('/.well-known/oauth-authorization-server', (_req, res) => {
-    res.status(404).json({ error: 'not_found' })
+    res.json(getAuthServerMetadata(config.publicUrl))
   })
 
-  app.post('/register', (_req, res) => {
-    res.status(404).json({ error: 'registration_not_supported', error_description: 'This server does not require authentication' })
+  // Dynamic Client Registration (RFC 7591)
+  app.post('/register', (req, res) => {
+    const { client_name, redirect_uris } = req.body
+    const client = registerClient(client_name, redirect_uris)
+    res.status(201).json({
+      client_id: client.clientId,
+      client_name: client.clientName,
+      redirect_uris: client.redirectUris,
+      token_endpoint_auth_method: 'none',
+      grant_types: ['authorization_code'],
+      response_types: ['code'],
+    })
   })
 
-  // Track active transports by session ID
-  const transports = new Map<string, StreamableHTTPServerTransport>()
+  // Authorization Endpoint — redirects to web app for Privy login
+  app.get('/authorize', (req, res) => {
+    const {
+      client_id, redirect_uri, response_type, state,
+      code_challenge, code_challenge_method, scope,
+    } = req.query as Record<string, string>
 
-  // --- Streamable HTTP MCP endpoint ---
-  // Single /mcp endpoint handles both POST (messages) and GET (SSE stream)
+    // Validate required params
+    if (response_type !== 'code') {
+      res.status(400).json({ error: 'unsupported_response_type' })
+      return
+    }
+    if (!client_id || !redirect_uri || !code_challenge) {
+      res.status(400).json({ error: 'invalid_request', error_description: 'Missing required parameters' })
+      return
+    }
+
+    const client = getOAuthClient(client_id)
+    if (!client) {
+      res.status(400).json({ error: 'invalid_client' })
+      return
+    }
+
+    // Create an auth code (pending — will be completed after Privy login)
+    const authCode = createAuthCode({
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      codeChallenge: code_challenge,
+      codeChallengeMethod: code_challenge_method || 'S256',
+    })
+
+    // Redirect to web app's /mcp-auth page for Privy login + delegation
+    const mcpAuthUrl = new URL(`${config.webAppUrl}/mcp-auth`)
+    mcpAuthUrl.searchParams.set('code', authCode.code)
+    mcpAuthUrl.searchParams.set('callback', config.publicUrl)
+    mcpAuthUrl.searchParams.set('state', state || '')
+    mcpAuthUrl.searchParams.set('redirect_uri', redirect_uri)
+
+    res.redirect(302, mcpAuthUrl.toString())
+  })
+
+  // Authorization completion — called by the web app after Privy login
+  app.post('/authorize/complete', async (req, res) => {
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
+    if (!rateLimit(ip, 30, 60_000)) {
+      res.status(429).json({ error: 'Too many attempts' })
+      return
+    }
+
+    const { code, privyToken, mode, walletId } = req.body
+
+    if (!code || !privyToken) {
+      res.status(400).json({ error: 'invalid_request', error_description: 'code and privyToken required' })
+      return
+    }
+
+    const authCode = getAuthCode(code)
+    if (!authCode) {
+      res.status(400).json({ error: 'invalid_grant', error_description: 'Code expired or invalid' })
+      return
+    }
+
+    try {
+      // Verify Privy token and extract wallet
+      const privyClient = await getPrivyClient(config)
+      const claims = await privyClient.verifyAuthToken(privyToken)
+      const user = await privyClient.getUser(claims.userId)
+
+      const solanaWallet = user.linkedAccounts.find(
+        (a: any) => a.type === 'wallet' && a.chainType === 'solana',
+      )
+
+      if (!solanaWallet || !('address' in solanaWallet)) {
+        res.status(400).json({ error: 'invalid_grant', error_description: 'No Solana wallet linked' })
+        return
+      }
+
+      // Complete the auth code with wallet info
+      completeAuthCode(code, solanaWallet.address, claims.userId, mode, walletId)
+
+      // Build the redirect URL back to the MCP client
+      const redirectUrl = new URL(authCode.redirectUri)
+      redirectUrl.searchParams.set('code', code)
+      if (req.body.state) redirectUrl.searchParams.set('state', req.body.state)
+
+      // Return the redirect URL for the browser to follow
+      res.json({
+        success: true,
+        wallet: solanaWallet.address,
+        redirectUrl: redirectUrl.toString(),
+      })
+    } catch (err: any) {
+      console.error('Auth error:', err)
+      res.status(401).json({ error: 'invalid_grant', error_description: 'Authentication failed' })
+    }
+  })
+
+  // Token Endpoint — exchanges auth code for access token
+  app.post('/token', (req, res) => {
+    const { grant_type, code, redirect_uri, client_id, code_verifier } = req.body
+
+    if (grant_type !== 'authorization_code') {
+      res.status(400).json({ error: 'unsupported_grant_type' })
+      return
+    }
+
+    if (!code || !code_verifier || !client_id) {
+      res.status(400).json({ error: 'invalid_request' })
+      return
+    }
+
+    // Consume the auth code (one-time use)
+    const authCode = consumeAuthCode(code)
+    if (!authCode) {
+      res.status(400).json({ error: 'invalid_grant', error_description: 'Code expired or already used' })
+      return
+    }
+
+    // Verify client
+    if (authCode.clientId !== client_id) {
+      res.status(400).json({ error: 'invalid_client' })
+      return
+    }
+
+    // Verify redirect_uri matches
+    if (redirect_uri && authCode.redirectUri !== redirect_uri) {
+      res.status(400).json({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' })
+      return
+    }
+
+    // Verify PKCE
+    if (!verifyPKCE(code_verifier, authCode.codeChallenge, authCode.codeChallengeMethod)) {
+      res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed' })
+      return
+    }
+
+    // Auth code must have been completed (user logged in via Privy)
+    if (!authCode.walletAddress || !authCode.privyUserId) {
+      res.status(400).json({ error: 'authorization_pending', error_description: 'User has not completed authentication yet' })
+      return
+    }
+
+    // Issue access token
+    const token = createAccessToken(
+      authCode.walletAddress,
+      authCode.privyUserId,
+      authCode.mode,
+      authCode.walletId,
+    )
+
+    res.json({
+      access_token: token,
+      token_type: 'Bearer',
+      expires_in: 86400, // 24h
+      scope: 'trade read',
+    })
+  })
+
+  // =============================================
+  // MCP Endpoint (Streamable HTTP)
+  // =============================================
+
+  const mcpTransports = new Map<string, StreamableHTTPServerTransport>()
+
+  // Helper: extract and validate Bearer token
+  function authenticateRequest(req: express.Request): { walletAddress: string; privyUserId: string; mode?: string; walletId?: string } | null {
+    const authHeader = req.headers.authorization
+    if (!authHeader?.startsWith('Bearer ')) return null
+    const token = authHeader.slice(7)
+    const tokenData = validateAccessToken(token)
+    if (!tokenData) return null
+    return tokenData
+  }
 
   app.post('/mcp', async (req, res) => {
+    const auth = authenticateRequest(req)
+
     // Check for existing session
     const sessionId = req.headers['mcp-session-id'] as string | undefined
 
-    if (sessionId && transports.has(sessionId)) {
-      // Existing session — forward the message
-      const transport = transports.get(sessionId)!
+    if (sessionId && mcpTransports.has(sessionId)) {
+      const transport = mcpTransports.get(sessionId)!
+
+      // Ensure session exists for authenticated users
+      if (auth && !getSession(sessionId)) {
+        createSession(sessionId, {
+          privyUserId: auth.privyUserId,
+          walletAddress: auth.walletAddress,
+          mode: (auth.mode as TradingMode) ?? null,
+          createdAt: new Date(),
+        })
+      }
+
       await transport.handleRequest(req, res)
       return
     }
 
-    // New session — create transport + MCP server
+    // New session
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
     })
@@ -126,217 +323,79 @@ export async function startServer(config: ServerConfig) {
     transport.onclose = () => {
       const sid = transport.sessionId
       if (sid) {
-        transports.delete(sid)
+        mcpTransports.delete(sid)
         deleteSession(sid)
       }
     }
 
     const mcpServer = createMcpServer(transport, config)
-
     await mcpServer.connect(transport)
-
-    // Store transport by its session ID
     await transport.handleRequest(req, res)
 
     if (transport.sessionId) {
-      transports.set(transport.sessionId, transport)
+      mcpTransports.set(transport.sessionId, transport)
+
+      // Create session for authenticated users
+      if (auth) {
+        createSession(transport.sessionId, {
+          privyUserId: auth.privyUserId,
+          walletAddress: auth.walletAddress,
+          mode: (auth.mode as TradingMode) ?? null,
+          createdAt: new Date(),
+        })
+      }
     }
   })
 
-  // GET /mcp — SSE stream for server-to-client notifications
   app.get('/mcp', async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string
-    const transport = transports.get(sessionId)
+    const transport = mcpTransports.get(sessionId)
     if (!transport) {
-      res.status(404).json({ error: 'Session not found. Send a POST to /mcp first.' })
+      res.status(404).json({ error: 'Session not found' })
       return
     }
     await transport.handleRequest(req, res)
   })
 
-  // DELETE /mcp — close session
   app.delete('/mcp', async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string
-    const transport = transports.get(sessionId)
+    const transport = mcpTransports.get(sessionId)
     if (transport) {
       await transport.handleRequest(req, res)
-      transports.delete(sessionId)
+      mcpTransports.delete(sessionId)
       deleteSession(sessionId)
     } else {
       res.status(404).json({ error: 'Session not found' })
     }
   })
 
-  // --- Device Auth Flow ---
-
-  app.get('/auth/:code', (req, res) => {
-    const code = req.params.code
-    const auth = getDeviceAuth(code)
-
-    if (!auth) {
-      res.send(renderAuthPage({
-        title: 'Link Expired',
-        message: 'This login link has expired or is invalid. Go back to your AI agent and run lavarage_login again.',
-        showLogin: false,
-      }))
-      return
-    }
-
-    if (auth.walletAddress) {
-      res.send(renderAuthPage({
-        title: 'Already Connected',
-        message: `Wallet ${auth.walletAddress} is already connected. You can close this tab.`,
-        showLogin: false,
-      }))
-      return
-    }
-
-    // Redirect to the web app's /mcp-auth page for Privy login + delegation
-    const redirectUrl = `${config.webAppUrl}/mcp-auth?code=${code}&callback=${encodeURIComponent(config.publicUrl)}&nonce=${auth.nonce}`
-    res.redirect(302, redirectUrl)
-  })
-
-  app.post('/auth/:code/complete', async (req, res) => {
-    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
-    if (!rateLimit(ip, 30, 60_000)) {
-      res.status(429).json({ error: 'Too many attempts. Try again later.' })
-      return
-    }
-
-    const code = req.params.code
-    const auth = getDeviceAuth(code)
-
-    if (!auth) {
-      res.status(404).json({ error: 'Code expired or invalid' })
-      return
-    }
-
-    if (auth.walletAddress) {
-      res.json({ success: true, wallet: auth.walletAddress })
-      return
-    }
-
-    const { type } = req.body
-
-    try {
-      if (type === 'wallet') {
-        const { walletAddress, signature, message } = req.body
-
-        if (!walletAddress || !signature || !message) {
-          res.status(400).json({ error: 'walletAddress, signature, and message are required' })
-          return
-        }
-
-        const expectedMessage = buildChallengeMessage(walletAddress, code, auth.nonce)
-        if (message !== expectedMessage) {
-          res.status(400).json({ error: 'Invalid message format' })
-          return
-        }
-
-        const { PublicKey } = await import('@solana/web3.js')
-        const nodeCrypto = await import('node:crypto')
-
-        const pubkey = new PublicKey(walletAddress)
-        const msgBytes = Buffer.from(message, 'utf-8')
-        const sigBytes = Buffer.from(signature, 'base64')
-
-        const keyObject = nodeCrypto.createPublicKey({
-          key: Buffer.concat([
-            Buffer.from('302a300506032b6570032100', 'hex'),
-            Buffer.from(pubkey.toBytes()),
-          ]),
-          format: 'der',
-          type: 'spki',
-        })
-
-        const valid = nodeCrypto.verify(null, msgBytes, keyObject, sigBytes)
-
-        if (!valid) {
-          res.status(401).json({ error: 'Invalid signature' })
-          return
-        }
-
-        const { mode, walletId } = req.body
-        completeDeviceAuth(code, `wallet:${walletAddress}`, walletAddress, mode, walletId)
-        res.json({ success: true, wallet: walletAddress })
-
-      } else if (type === 'privy') {
-        const { privyToken } = req.body
-
-        if (!privyToken) {
-          res.status(400).json({ error: 'privyToken is required' })
-          return
-        }
-
-        const client = await getPrivyClient(config)
-        const claims = await client.verifyAuthToken(privyToken)
-        const user = await client.getUser(claims.userId)
-
-        const solanaWallet = user.linkedAccounts.find(
-          (a: any) => a.type === 'wallet' && a.chainType === 'solana',
-        )
-
-        if (!solanaWallet || !('address' in solanaWallet)) {
-          res.status(400).json({ error: 'No Solana wallet linked to this account' })
-          return
-        }
-
-        const { mode, walletId } = req.body
-        completeDeviceAuth(code, claims.userId, solanaWallet.address, mode, walletId)
-        res.json({ success: true, wallet: solanaWallet.address })
-
-      } else {
-        res.status(400).json({ error: 'Invalid auth type' })
-      }
-    } catch (err: any) {
-      console.error(`Auth error for code ${code}:`, err)
-      res.status(401).json({ error: 'Authentication failed' })
-    }
-  })
-
-  app.get('/auth/:code/status', (req, res) => {
-    const code = req.params.code
-    const auth = getDeviceAuth(code)
-
-    if (!auth) {
-      res.json({ status: 'expired' })
-      return
-    }
-
-    if (auth.walletAddress) {
-      res.json({ status: 'complete', wallet: auth.walletAddress, userId: auth.privyUserId, mode: auth.mode, walletId: auth.walletId })
-    } else {
-      res.json({ status: 'pending' })
-    }
-  })
-
+  // =============================================
   // Health
+  // =============================================
+
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' })
   })
 
+  // Startup
   if (!config.privySigningKey) {
     console.warn('WARNING: PRIVY_SIGNING_KEY not set — server-wallet mode will be unavailable')
   }
 
   const httpServer = app.listen(config.port, config.host, () => {
     console.log(`Lavarage Trader MCP server running at ${config.publicUrl}`)
-    console.log(`  MCP: POST /mcp | Auth: /auth/:code | Health: /health`)
+    console.log(`  MCP: /mcp | OAuth: /authorize, /token | Health: /health`)
   })
 
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down...')
-    httpServer.close(() => process.exit(0))
-  })
-  process.on('SIGINT', () => {
-    console.log('SIGINT received, shutting down...')
-    httpServer.close(() => process.exit(0))
-  })
+  process.on('SIGTERM', () => { httpServer.close(() => process.exit(0)) })
+  process.on('SIGINT', () => { httpServer.close(() => process.exit(0)) })
 }
 
+// =============================================
+// MCP Server Factory
+// =============================================
+
 function createMcpServer(transport: StreamableHTTPServerTransport, config: ServerConfig): McpServer {
-  // We use the transport's sessionId for session scoping
-  // The sessionId is available after the first request is handled
   function getSessionId(): string {
     const sid = transport.sessionId
     if (!sid) throw new Error('No session established')
@@ -345,13 +404,13 @@ function createMcpServer(transport: StreamableHTTPServerTransport, config: Serve
 
   function getClient(): LavaApiClient {
     const session = getSession(getSessionId())
-    if (!session) throw new Error('Not authenticated. Call lavarage_login first.')
+    if (!session) throw new Error('Not authenticated. Complete the OAuth login flow first.')
     return new LavaApiClient(config.apiUrl, config.apiKey, session.walletAddress)
   }
 
   function getWallet(): string {
     const session = getSession(getSessionId())
-    if (!session) throw new Error('Not authenticated. Call lavarage_login first.')
+    if (!session) throw new Error('Not authenticated.')
     return session.walletAddress
   }
 
@@ -365,7 +424,6 @@ function createMcpServer(transport: StreamableHTTPServerTransport, config: Serve
     version: '0.1.0',
   })
 
-  // Tools use getSessionId() lazily — sessionId is set after first handleRequest
   registerLoginTool(server, () => getSessionId(), config)
   registerSetupTool(server, () => getSessionId())
   registerMarketTools(server, getClient)
