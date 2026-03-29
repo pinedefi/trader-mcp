@@ -48,8 +48,15 @@ export async function getPrivyClient(config: ServerConfig) {
 
 export async function startServer(config: ServerConfig) {
   const app = express()
-  app.use(express.json())
-  app.use(express.urlencoded({ extended: true }))
+  // Parse JSON for all routes EXCEPT /mcp — StreamableHTTPServerTransport handles its own parsing
+  app.use((req, res, next) => {
+    if (req.path === '/mcp') return next()
+    express.json()(req, res, next)
+  })
+  app.use((req, res, next) => {
+    if (req.path === '/mcp') return next()
+    express.urlencoded({ extended: true })(req, res, next)
+  })
 
   // Request logging
   app.use((req, _res, next) => {
