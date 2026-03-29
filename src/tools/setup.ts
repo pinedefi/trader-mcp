@@ -4,7 +4,7 @@ import { getSession, updateSessionMode, type TradingMode } from '../session.js'
 
 export function registerSetupTool(
   server: McpServer,
-  sessionId: string,
+  getSessionId: () => string,
 ) {
   server.tool(
     'lavarage_setup',
@@ -20,7 +20,7 @@ Mode "server-wallet": Lavarage signs and submits transactions on your behalf usi
     },
     async ({ mode }) => {
       try {
-        const session = getSession(sessionId)
+        const session = getSession(getSessionId())
         if (!session) {
           return {
             content: [{
@@ -31,7 +31,7 @@ Mode "server-wallet": Lavarage signs and submits transactions on your behalf usi
           }
         }
 
-        updateSessionMode(sessionId, mode as TradingMode)
+        updateSessionMode(getSessionId(), mode as TradingMode)
 
         const modeDesc = mode === 'unsigned'
           ? 'Transactions will be returned unsigned (base64). Your agent signs and submits them.'

@@ -1,6 +1,6 @@
 import express from 'express'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { LavaApiClient } from './api-client.js'
 import { createSession, createTransport, deleteSession, getSession, validateSessionSecret, type TradingMode } from './session.js'
 import { createDeviceCode, getDeviceAuth, completeDeviceAuth, deleteDeviceCode, buildChallengeMessage } from './device-auth.js'
@@ -27,7 +27,7 @@ export interface ServerConfig {
   maxPositionSol: number
 }
 
-// Lazy-loaded singleton PrivyClient — shared across all auth + trade calls
+// Lazy-loaded singleton PrivyClient
 let privyClientInstance: any = null
 export async function getPrivyClient(config: ServerConfig) {
   if (!privyClientInstance) {
@@ -44,7 +44,7 @@ export async function startServer(config: ServerConfig) {
   const app = express()
   app.use(express.json())
 
-  // Request logging (#20)
+  // Request logging
   app.use((req, _res, next) => {
     if (req.path !== '/health') {
       console.log(`${new Date().toISOString()} ${req.method} ${req.path}`)
@@ -52,16 +52,16 @@ export async function startServer(config: ServerConfig) {
     next()
   })
 
-  // CORS (#3) — only allow requests from our own auth page origin
+  // CORS
   app.use((req, res, next) => {
     const origin = req.headers.origin
     if (origin) {
-      // Allow requests from our public URL, web app, and localhost (dev)
       const allowed = origin === config.publicUrl || origin === config.webAppUrl || origin.startsWith('http://localhost')
       if (allowed) {
         res.setHeader('Access-Control-Allow-Origin', origin)
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-session-secret')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, x-session-secret')
+        res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id')
       }
     }
     if (req.method === 'OPTIONS') {
@@ -71,7 +71,7 @@ export async function startServer(config: ServerConfig) {
     next()
   })
 
-  // Simple rate limiter (#10) — per-IP, in-memory
+  // Simple rate limiter
   const rateLimits = new Map<string, { count: number; resetAt: number }>()
   function rateLimit(ip: string, limit: number, windowMs: number): boolean {
     const now = Date.now()
@@ -84,63 +84,74 @@ export async function startServer(config: ServerConfig) {
     return entry.count <= limit
   }
 
-  // Track active SSE transports
-  const sseTransports = new Map<string, SSEServerTransport>()
+  // Track active transports by session ID
+  const transports = new Map<string, StreamableHTTPServerTransport>()
 
-  // SSE endpoint
-  app.get('/sse', (req, res) => {
-    const sessionId = crypto.randomUUID()
-    const sessionTransport = createTransport(sessionId)
-    const transport = new SSEServerTransport('/messages', res)
+  // --- Streamable HTTP MCP endpoint ---
+  // Single /mcp endpoint handles both POST (messages) and GET (SSE stream)
 
-    sseTransports.set(sessionId, transport)
+  app.post('/mcp', async (req, res) => {
+    // Check for existing session
+    const sessionId = req.headers['mcp-session-id'] as string | undefined
 
-    res.write(`event: session\ndata: ${JSON.stringify({ sessionId, secret: sessionTransport.secret })}\n\n`)
+    if (sessionId && transports.has(sessionId)) {
+      // Existing session — forward the message
+      const transport = transports.get(sessionId)!
+      await transport.handleRequest(req, res)
+      return
+    }
 
-    const mcpServer = createMcpServer(sessionId, config)
-
-    mcpServer.connect(transport).catch((err) => {
-      console.error(`[${sessionId}] Connection error:`, err)
-      // Cleanup on failed connect (#23)
-      sseTransports.delete(sessionId)
-      deleteSession(sessionId)
+    // New session — create transport + MCP server
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
     })
 
-    res.on('close', () => {
-      sseTransports.delete(sessionId)
-      deleteSession(sessionId)
-    })
+    transport.onclose = () => {
+      const sid = transport.sessionId
+      if (sid) {
+        transports.delete(sid)
+        deleteSession(sid)
+      }
+    }
+
+    const mcpServer = createMcpServer(transport, config)
+
+    await mcpServer.connect(transport)
+
+    // Store transport by its session ID
+    await transport.handleRequest(req, res)
+
+    if (transport.sessionId) {
+      transports.set(transport.sessionId, transport)
+    }
   })
 
-  // Message endpoint — validates session secret if provided, otherwise
-  // relies on the SSE transport's built-in sessionId binding (standard MCP clients
-  // don't send custom headers, but the sessionId query param is set by the SDK)
-  app.post('/messages', (req, res) => {
-    const sessionId = req.query.sessionId as string
-
-    if (!sessionId) {
-      res.status(401).json({ error: 'Missing sessionId' })
-      return
-    }
-
-    // If x-session-secret is provided, validate it (custom clients)
-    const secret = req.headers['x-session-secret'] as string | undefined
-    if (secret && !validateSessionSecret(sessionId, secret)) {
-      res.status(403).json({ error: 'Invalid session secret' })
-      return
-    }
-
-    const transport = sseTransports.get(sessionId)
+  // GET /mcp — SSE stream for server-to-client notifications
+  app.get('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'] as string
+    const transport = transports.get(sessionId)
     if (!transport) {
-      res.status(404).json({ error: 'Session not found' })
+      res.status(404).json({ error: 'Session not found. Send a POST to /mcp first.' })
       return
     }
-    transport.handlePostMessage(req, res)
+    await transport.handleRequest(req, res)
+  })
+
+  // DELETE /mcp — close session
+  app.delete('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'] as string
+    const transport = transports.get(sessionId)
+    if (transport) {
+      await transport.handleRequest(req, res)
+      transports.delete(sessionId)
+      deleteSession(sessionId)
+    } else {
+      res.status(404).json({ error: 'Session not found' })
+    }
   })
 
   // --- Device Auth Flow ---
 
-  // Auth page
   app.get('/auth/:code', (req, res) => {
     const code = req.params.code
     const auth = getDeviceAuth(code)
@@ -168,7 +179,6 @@ export async function startServer(config: ServerConfig) {
     res.redirect(302, redirectUrl)
   })
 
-  // Auth completion — wallet signature or Privy token
   app.post('/auth/:code/complete', async (req, res) => {
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
     if (!rateLimit(ip, 30, 60_000)) {
@@ -200,14 +210,12 @@ export async function startServer(config: ServerConfig) {
           return
         }
 
-        // Exact message format match (#5) with server-issued nonce (#4)
         const expectedMessage = buildChallengeMessage(walletAddress, code, auth.nonce)
         if (message !== expectedMessage) {
           res.status(400).json({ error: 'Invalid message format' })
           return
         }
 
-        // Verify ed25519 signature
         const { PublicKey } = await import('@solana/web3.js')
         const nodeCrypto = await import('node:crypto')
 
@@ -264,13 +272,11 @@ export async function startServer(config: ServerConfig) {
         res.status(400).json({ error: 'Invalid auth type' })
       }
     } catch (err: any) {
-      // Sanitized error (#12)
       console.error(`Auth error for code ${code}:`, err)
       res.status(401).json({ error: 'Authentication failed' })
     }
   })
 
-  // Auth status polling
   app.get('/auth/:code/status', (req, res) => {
     const code = req.params.code
     const auth = getDeviceAuth(code)
@@ -287,20 +293,18 @@ export async function startServer(config: ServerConfig) {
     }
   })
 
-  // Health check (#18 — minimal public info)
+  // Health
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' })
   })
 
-  // Startup validation (#22)
   if (!config.privySigningKey) {
     console.warn('WARNING: PRIVY_SIGNING_KEY not set — server-wallet mode will be unavailable')
   }
 
-  // Graceful shutdown (#14)
   const httpServer = app.listen(config.port, config.host, () => {
     console.log(`Lavarage Trader MCP server running at ${config.publicUrl}`)
-    console.log(`  SSE: /sse | Auth: /auth/:code | Health: /health`)
+    console.log(`  MCP: POST /mcp | Auth: /auth/:code | Health: /health`)
   })
 
   process.on('SIGTERM', () => {
@@ -313,21 +317,29 @@ export async function startServer(config: ServerConfig) {
   })
 }
 
-function createMcpServer(sessionId: string, config: ServerConfig): McpServer {
+function createMcpServer(transport: StreamableHTTPServerTransport, config: ServerConfig): McpServer {
+  // We use the transport's sessionId for session scoping
+  // The sessionId is available after the first request is handled
+  function getSessionId(): string {
+    const sid = transport.sessionId
+    if (!sid) throw new Error('No session established')
+    return sid
+  }
+
   function getClient(): LavaApiClient {
-    const session = getSession(sessionId)
+    const session = getSession(getSessionId())
     if (!session) throw new Error('Not authenticated. Call lavarage_login first.')
     return new LavaApiClient(config.apiUrl, config.apiKey, session.walletAddress)
   }
 
   function getWallet(): string {
-    const session = getSession(sessionId)
+    const session = getSession(getSessionId())
     if (!session) throw new Error('Not authenticated. Call lavarage_login first.')
     return session.walletAddress
   }
 
   function getMode(): TradingMode | null {
-    const session = getSession(sessionId)
+    const session = getSession(getSessionId())
     return session?.mode ?? null
   }
 
@@ -336,8 +348,9 @@ function createMcpServer(sessionId: string, config: ServerConfig): McpServer {
     version: '0.1.0',
   })
 
-  registerLoginTool(server, sessionId, config)
-  registerSetupTool(server, sessionId)
+  // Tools use getSessionId() lazily — sessionId is set after first handleRequest
+  registerLoginTool(server, () => getSessionId(), config)
+  registerSetupTool(server, () => getSessionId())
   registerMarketTools(server, getClient)
   registerPositionTools(server, getClient)
   registerTradeTools(server, getClient, getWallet, getMode, config)

@@ -6,7 +6,7 @@ import type { ServerConfig } from '../server.js'
 
 export function registerLoginTool(
   server: McpServer,
-  sessionId: string,
+  getSessionId: () => string,
   config: ServerConfig,
 ) {
   server.tool(
@@ -25,7 +25,7 @@ Call this tool again after opening the URL to check if login is complete.`,
     async ({ checkCode }) => {
       try {
         // Already logged in?
-        const existing = getSession(sessionId)
+        const existing = getSession(getSessionId())
         if (existing) {
           return {
             content: [{
@@ -56,7 +56,7 @@ Call this tool again after opening the URL to check if login is complete.`,
           }
 
           // Verify this code belongs to this session (#2 — prevents cross-session hijacking)
-          if (auth.sessionId !== sessionId) {
+          if (auth.sessionId !== getSessionId()) {
             return {
               content: [{
                 type: 'text' as const,
@@ -73,7 +73,7 @@ Call this tool again after opening the URL to check if login is complete.`,
             // Delete code BEFORE creating session (#24 — atomic to prevent double-claim)
             const completedMode = auth.mode ?? null
             deleteDeviceCode(checkCode)
-            createSession(sessionId, {
+            createSession(getSessionId(), {
               privyUserId: auth.privyUserId,
               walletAddress: auth.walletAddress,
               mode: completedMode,
@@ -111,7 +111,7 @@ Call this tool again after opening the URL to check if login is complete.`,
         }
 
         // Create a new device code
-        const auth = createDeviceCode(sessionId)
+        const auth = createDeviceCode(getSessionId())
         const url = `${config.publicUrl}/auth/${auth.code}`
 
         return {
