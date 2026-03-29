@@ -112,17 +112,20 @@ export async function startServer(config: ServerConfig) {
     })
   })
 
-  // Message endpoint — validates session secret
+  // Message endpoint — validates session secret if provided, otherwise
+  // relies on the SSE transport's built-in sessionId binding (standard MCP clients
+  // don't send custom headers, but the sessionId query param is set by the SDK)
   app.post('/messages', (req, res) => {
     const sessionId = req.query.sessionId as string
-    const secret = req.headers['x-session-secret'] as string
 
-    if (!sessionId || !secret) {
-      res.status(401).json({ error: 'Missing sessionId or x-session-secret' })
+    if (!sessionId) {
+      res.status(401).json({ error: 'Missing sessionId' })
       return
     }
 
-    if (!validateSessionSecret(sessionId, secret)) {
+    // If x-session-secret is provided, validate it (custom clients)
+    const secret = req.headers['x-session-secret'] as string | undefined
+    if (secret && !validateSessionSecret(sessionId, secret)) {
       res.status(403).json({ error: 'Invalid session secret' })
       return
     }
