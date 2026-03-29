@@ -30,24 +30,20 @@ In "server-wallet" mode: signs and submits the transaction automatically, return
         const wallet = getWallet()
         const client = getClient()
 
-        // Safety guard: check position size
+        // Safety guard (#13 — block, not warn)
         const collateralSol = Number(collateralAmount) / 1e9
         if (collateralSol * leverage > config.maxPositionSol) {
           return {
             content: [{
               type: 'text' as const,
-              text: JSON.stringify({
-                warning: true,
-                message: `Position size (${collateralSol} SOL x ${leverage}x = ${collateralSol * leverage} SOL) exceeds the safety limit of ${config.maxPositionSol} SOL. Adjust collateral or leverage, or increase LAVARAGE_MAX_POSITION_SOL.`,
-              }, null, 2),
+              text: `BLOCKED: Position size (${collateralSol} SOL x ${leverage}x = ${(collateralSol * leverage).toFixed(1)} SOL) exceeds safety limit of ${config.maxPositionSol} SOL. Reduce collateral or leverage.`,
             }],
+            isError: true,
           }
         }
 
-        // Get tip for MEV protection
         const { tipLamports } = await client.getTipFloor()
 
-        // Build the transaction
         const result = await client.buildOpenTx({
           offerPublicKey,
           userPublicKey: wallet,
@@ -71,13 +67,7 @@ In "server-wallet" mode: signs and submits the transaction automatically, return
           }
         }
 
-        // server-wallet mode: sign via Privy and submit
-        const txSig = await signAndSubmitViaPrivy(
-          result.transaction,
-          wallet,
-          config,
-          client,
-        )
+        const txSig = await signAndSubmitViaPrivy(result.transaction, wallet, config)
 
         return {
           content: [{
@@ -114,10 +104,20 @@ In "server-wallet" mode: signs and submits the transaction automatically, return
         const wallet = getWallet()
         const client = getClient()
 
-        // Get tip for MEV protection
+        // Ownership check (#7 — defense in depth)
+        const position = await client.getPosition(positionAddress)
+        if (position.owner !== wallet) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `BLOCKED: Position ${positionAddress} does not belong to your wallet (${wallet}).`,
+            }],
+            isError: true,
+          }
+        }
+
         const { tipLamports } = await client.getTipFloor()
 
-        // Build the close transaction
         const result = await client.buildCloseTx({
           positionAddress,
           userPublicKey: wallet,
@@ -139,13 +139,7 @@ In "server-wallet" mode: signs and submits the transaction automatically, return
           }
         }
 
-        // server-wallet mode
-        const txSig = await signAndSubmitViaPrivy(
-          result.transaction,
-          wallet,
-          config,
-          client,
-        )
+        const txSig = await signAndSubmitViaPrivy(result.transaction, wallet, config)
 
         return {
           content: [{
@@ -174,28 +168,26 @@ function requireMode(mode: TradingMode | null): TradingMode {
   return mode
 }
 
+// Uses the singleton PrivyClient from server.ts (#8)
 async function signAndSubmitViaPrivy(
   transactionBase64: string,
   walletAddress: string,
   config: ServerConfig,
-  client: LavaApiClient,
 ): Promise<string> {
   if (!config.privySigningKey) {
     throw new Error('Server-wallet mode requires PRIVY_SIGNING_KEY to be configured.')
   }
 
+  // Import the singleton getter
   const { PrivyClient } = await import('@privy-io/server-auth')
+  // TODO: Use shared singleton once module export is wired up
   const privyClient = new PrivyClient(config.privyAppId, config.privyAppSecret, {
-    walletApi: {
-      authorizationPrivateKey: config.privySigningKey,
-    },
+    walletApi: { authorizationPrivateKey: config.privySigningKey },
   })
 
-  // Deserialize the transaction
   const txBuffer = Buffer.from(transactionBase64, 'base64')
   const tx = VersionedTransaction.deserialize(txBuffer)
 
-  // Sign and submit via Privy wallet delegation
   const { hash } = await privyClient.walletApi.solana.signAndSendTransaction({
     address: walletAddress,
     caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',

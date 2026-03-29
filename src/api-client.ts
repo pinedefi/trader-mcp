@@ -24,15 +24,23 @@ export class LavaApiClient {
     return this.get(`/api/v1/positions?${params}`)
   }
 
+  getWalletAddress(): string {
+    return this.wallet
+  }
+
   async getPosition(address: string): Promise<any> {
+    // Fetch all positions for this wallet and filter by address
+    // TODO: Add a /positions/:address endpoint to the backend for direct lookup
     const positions = await this.get(
-      `/api/v1/positions?owner=${this.wallet}&limit=1&offerPublicKey=&nodeWallet=`,
+      `/api/v1/positions?owner=${this.wallet}&limit=250`,
     )
-    // Filter client-side by address since the API doesn't have a direct address filter
     const match = Array.isArray(positions)
       ? positions.find((p: any) => p.address === address)
       : null
-    if (!match) throw { statusCode: 404, code: 'POSITION_NOT_FOUND', message: `Position ${address} not found` }
+    if (!match) {
+      const err: ApiError = { statusCode: 404, code: 'POSITION_NOT_FOUND', message: `Position ${address} not found for wallet ${this.wallet}` }
+      throw err
+    }
     return match
   }
 

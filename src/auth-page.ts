@@ -14,9 +14,10 @@ export function renderAuthPage(opts: {
   showLogin: boolean
   privyAppId?: string
   code?: string
+  nonce?: string
   publicUrl?: string
 }): string {
-  const { title, message, showLogin, privyAppId, code, publicUrl } = opts
+  const { title, message, showLogin, privyAppId, code, nonce, publicUrl } = opts
 
   if (!showLogin) {
     return renderShell(title, message ? `<p class="msg">${message}</p>` : '')
@@ -40,15 +41,16 @@ export function renderAuthPage(opts: {
 
     <script>
       const CODE = ${JSON.stringify(code)};
+      const NONCE = ${JSON.stringify(nonce)};
       const PUBLIC_URL = ${JSON.stringify(publicUrl)};
       const PRIVY_APP_ID = ${JSON.stringify(privyAppId)};
 
-      // Challenge message format — same as the server expects
-      function challengeMessage(wallet, nonce) {
+      // Exact message format — must match server's buildChallengeMessage()
+      function challengeMessage(wallet) {
         return 'Sign this message to authenticate with Lavarage MCP.\\n\\n' +
                'Wallet: ' + wallet + '\\n' +
                'Code: ' + CODE + '\\n' +
-               'Nonce: ' + nonce;
+               'Nonce: ' + NONCE;
       }
 
       function setStatus(html) {
@@ -93,9 +95,8 @@ export function renderAuthPage(opts: {
           const walletAddress = resp.publicKey.toString();
           setStatus('<p class="pending">Connected: ' + walletAddress.slice(0,4) + '...' + walletAddress.slice(-4) + '. Signing message...</p>');
 
-          // Sign a challenge message
-          const nonce = crypto.randomUUID();
-          const message = challengeMessage(walletAddress, nonce);
+          // Sign the server-generated challenge message
+          const message = challengeMessage(walletAddress);
           const encoded = new TextEncoder().encode(message);
           const { signature } = await provider.signMessage(encoded, 'utf8');
 

@@ -55,15 +55,29 @@ Call this tool again after opening the URL to check if login is complete.`,
             }
           }
 
+          // Verify this code belongs to this session (#2 — prevents cross-session hijacking)
+          if (auth.sessionId !== sessionId) {
+            return {
+              content: [{
+                type: 'text' as const,
+                text: JSON.stringify({
+                  status: 'error',
+                  message: 'This login code belongs to a different session. Call lavarage_login to get your own code.',
+                }, null, 2),
+              }],
+              isError: true,
+            }
+          }
+
           if (auth.walletAddress && auth.privyUserId) {
-            // Auth complete — create the session
+            // Delete code BEFORE creating session (#24 — atomic to prevent double-claim)
+            deleteDeviceCode(checkCode)
             createSession(sessionId, {
               privyUserId: auth.privyUserId,
               walletAddress: auth.walletAddress,
               mode: null,
               createdAt: new Date(),
             })
-            deleteDeviceCode(checkCode)
 
             return {
               content: [{

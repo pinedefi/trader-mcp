@@ -9,7 +9,7 @@ export function registerMarketTools(
   server.tool(
     'lavarage_list_tokens',
     'List all supported tokens on Lavarage with current prices and metadata.',
-    { search: z.string().optional().describe('Optional search filter by token name or symbol') },
+    { search: z.string().max(200).optional().describe('Optional search filter by token name or symbol') },
     async ({ search }) => {
       try {
         const tokens = await getClient().getTokens(search)
@@ -82,7 +82,7 @@ export function registerMarketTools(
         const client = getClient()
         const quote = await client.getOpenQuote({
           offerPublicKey,
-          userPublicKey: client['wallet'],
+          userPublicKey: client.getWalletAddress(),
           collateralAmount,
           leverage,
           slippageBps,
