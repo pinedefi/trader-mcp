@@ -84,6 +84,25 @@ export async function startServer(config: ServerConfig) {
     return entry.count <= limit
   }
 
+  // --- OAuth opt-out ---
+  // Claude Code probes these before connecting. Return proper responses
+  // so it knows auth is not required.
+
+  // OAuth Protected Resource metadata — return 404 to signal "no auth"
+  app.get('/.well-known/oauth-protected-resource', (_req, res) => {
+    res.status(404).end()
+  })
+
+  // OAuth Authorization Server metadata — return 404
+  app.get('/.well-known/oauth-authorization-server', (_req, res) => {
+    res.status(404).end()
+  })
+
+  // Dynamic Client Registration — return 404
+  app.post('/register', (_req, res) => {
+    res.status(404).end()
+  })
+
   // Track active transports by session ID
   const transports = new Map<string, StreamableHTTPServerTransport>()
 
