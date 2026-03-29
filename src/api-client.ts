@@ -70,7 +70,7 @@ export class LavaApiClient {
     leverage: number
     slippageBps?: number
   }): Promise<any> {
-    return this.post('/api/v1/positions/open-quote', dto)
+    return this.post('/api/v1/positions/quote', dto)
   }
 
   // --- Trade History ---
