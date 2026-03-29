@@ -140,7 +140,7 @@ export function renderLandingPage(publicUrl: string): string {
           <p>Run on your machine with your own Solana keypair. Full control.</p>
         </div>
         <div class="install-prompt" onclick="copyToClipboard(this)">
-          <span class="install-text">Install Lavarage MCP: run \`npm install -g @lavarage/trader-mcp\` then add a "lavarage" MCP server to my Claude config with command "lavarage-trader-mcp-local" and env vars LAVARAGE_API_URL="https://api.lavarage.xyz", LAVARAGE_API_KEY (ask me for my key), and LAVARAGE_KEYPAIR_PATH (ask me for my keypair path). Transactions will be returned unsigned for me to sign.</span>
+          <span class="install-text">Install Lavarage MCP: run \`npm install -g @lavarage/trader-mcp\` then add a "lavarage" MCP server to my Claude config with command "lavarage-trader-mcp-local" and env var LAVARAGE_KEYPAIR_PATH set to my Solana keypair file path (ask me where mine is). The API key and URL are built in — no configuration needed.</span>
           <span class="copy-btn" title="Click to copy">Copy</span>
         </div>
       </div>
@@ -170,14 +170,13 @@ export function renderLandingPage(publicUrl: string): string {
         &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"lavarage"</span>: {<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"lavarage-trader-mcp-local"</span>,<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"env"</span>: {<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"LAVARAGE_API_URL"</span>: <span class="str">"https://api.lavarage.xyz"</span>,<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"LAVARAGE_API_KEY"</span>: <span class="str">"your-api-key"</span>,<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"LAVARAGE_KEYPAIR_PATH"</span>: <span class="str">"~/.config/solana/id.json"</span><br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>
         &nbsp;&nbsp;&nbsp;&nbsp;}<br>
         &nbsp;&nbsp;}<br>
         }
       </div>
+      <p style="font-size: 0.85rem;">API key and URL are built in. Just set your keypair path.</p>
     </div>
 
     <!-- Tools -->

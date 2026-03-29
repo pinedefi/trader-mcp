@@ -28,17 +28,18 @@ import { registerHistoryTools } from './tools/history.js'
 import { registerManageTools } from './tools/manage.js'
 import type { ServerConfig } from './server.js'
 
-const API_URL = process.env.LAVARAGE_API_URL
-const API_KEY = process.env.LAVARAGE_API_KEY
+// Default public API key — same one the web app uses. Not a secret.
+// Rate limiting is per-IP, positions are scoped by wallet.
+const DEFAULT_API_KEY = 'lv2_prod_f10d28b9ef5694e38b61eb614556ed85ab480585ef03c39c'
+const DEFAULT_API_URL = 'https://api.lavarage.xyz'
+
+const API_URL = process.env.LAVARAGE_API_URL ?? DEFAULT_API_URL
+const API_KEY = process.env.LAVARAGE_API_KEY ?? DEFAULT_API_KEY
 const KEYPAIR_PATH = process.env.LAVARAGE_KEYPAIR_PATH
 
-if (!API_URL || !API_KEY) {
-  console.error('LAVARAGE_API_URL and LAVARAGE_API_KEY are required.')
-  process.exit(1)
-}
-
 if (!KEYPAIR_PATH) {
-  console.error('LAVARAGE_KEYPAIR_PATH is required for local mode.')
+  console.error('LAVARAGE_KEYPAIR_PATH is required. Set it to your Solana keypair JSON file path.')
+  console.error('Example: LAVARAGE_KEYPAIR_PATH=~/.config/solana/id.json')
   process.exit(1)
 }
 
