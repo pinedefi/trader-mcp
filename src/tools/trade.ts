@@ -4,6 +4,7 @@ import { VersionedTransaction } from '@solana/web3.js'
 import type { LavaApiClient } from '../api-client.js'
 import type { TradingMode } from '../session.js'
 import { getPrivyClient, type ServerConfig } from '../server.js'
+import { toLamports } from './market.js'
 
 export function registerTradeTools(
   server: McpServer,
@@ -17,18 +18,22 @@ export function registerTradeTools(
     `Open a new leveraged trading position on Lavarage.
 
 In "unsigned" mode: returns the unsigned transaction (base64) for you to sign and submit.
-In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.`,
+In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.
+
+Collateral can be in SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values under 1000 are treated as SOL.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
-      collateralAmount: z.string().describe('Collateral in lamports (1 SOL = 1000000000)'),
+      collateral: z.string().describe('Collateral — in SOL (e.g. "0.5") or lamports (e.g. "500000000")'),
       leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },
-    async ({ offerPublicKey, collateralAmount, leverage, slippageBps }) => {
+    async ({ offerPublicKey, collateral, leverage, slippageBps }) => {
       try {
         const mode = requireMode(getMode())
         const wallet = getWallet()
         const client = getClient()
+
+        const collateralAmount = toLamports(collateral)
 
         // Safety guard (#13 — block, not warn)
         const collateralSol = Number(collateralAmount) / 1e9

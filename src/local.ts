@@ -71,6 +71,7 @@ const config: ServerConfig = {
   host: '',
   publicUrl: '',
   webAppUrl: '',
+  solanaRpcUrl: process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com',
   apiUrl: API_URL,
   apiKey: API_KEY,
   privyAppId: '',

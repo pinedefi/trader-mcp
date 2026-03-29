@@ -19,6 +19,7 @@ import { registerTradeTools } from './tools/trade.js'
 import { registerOrderTools } from './tools/orders.js'
 import { registerHistoryTools } from './tools/history.js'
 import { registerManageTools } from './tools/manage.js'
+import { registerWalletTools } from './tools/wallet.js'
 
 export interface ServerConfig {
   port: number
@@ -30,6 +31,7 @@ export interface ServerConfig {
   privyAppId: string
   privyAppSecret: string
   privySigningKey?: string
+  solanaRpcUrl: string
   maxPositionSol: number
 }
 
@@ -452,6 +454,7 @@ function createMcpServer(transport: StreamableHTTPServerTransport, config: Serve
   registerOrderTools(server, getClient)
   registerHistoryTools(server, getClient)
   registerManageTools(server, getClient, getWallet, getMode, config)
+  registerWalletTools(server, getClient, config.solanaRpcUrl)
 
   return server
 }

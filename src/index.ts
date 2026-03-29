@@ -26,6 +26,7 @@ if (!PRIVY_APP_ID || !PRIVY_APP_SECRET) {
 
 const PUBLIC_URL = process.env.PUBLIC_URL ?? `http://localhost:${PORT}`
 const WEB_APP_URL = process.env.WEB_APP_URL ?? 'https://v2.lavarage.xyz'
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com'
 const maxPositionSol = Number(process.env.LAVARAGE_MAX_POSITION_SOL ?? '10')
 
 startServer({
@@ -38,6 +39,7 @@ startServer({
   privyAppId: PRIVY_APP_ID,
   privyAppSecret: PRIVY_APP_SECRET,
   privySigningKey: PRIVY_SIGNING_KEY,
+  solanaRpcUrl: SOLANA_RPC_URL,
   maxPositionSol,
 }).catch((err) => {
   console.error('Fatal error:', err)
