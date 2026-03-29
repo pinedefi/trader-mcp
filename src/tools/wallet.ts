@@ -3,6 +3,17 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'
 import type { LavaApiClient } from '../api-client.js'
 
+// Well-known mints for instant resolution
+const KNOWN_MINTS: Record<string, string> = {
+  'So11111111111111111111111111111111111111112': 'WSOL',
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': 'USDC',
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': 'USDT',
+  'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So': 'mSOL',
+  'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn': 'jitoSOL',
+  'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263': 'BONK',
+  'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN': 'JUP',
+}
+
 export function registerWalletTools(
   server: McpServer,
   getClient: () => LavaApiClient,
@@ -34,15 +45,17 @@ export function registerWalletTools(
             if (!info) return null
             const amount = Number(info.tokenAmount?.uiAmount ?? 0)
             if (amount === 0) return null
+            const mint = info.mint as string
             return {
-              mint: info.mint,
+              mint,
+              symbol: KNOWN_MINTS[mint] ?? null,
               amount,
               decimals: info.tokenAmount?.decimals,
             }
           })
           .filter(Boolean)
           .sort((a: any, b: any) => b.amount - a.amount)
-          .slice(0, 10) // Top 10 by amount
+          .slice(0, 10)
 
         return {
           content: [{
@@ -106,6 +119,73 @@ export function registerWalletTools(
               recentClosed,
               message: `${open.length} open position(s): ${longs} long, ${shorts} short, ${borrows} borrow. ${closed.length} total closed.`,
             }, null, 2),
+          }],
+        }
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: ${err.message}` }],
+          isError: true,
+        }
+      }
+    },
+  )
+
+  server.tool(
+    'lavarage_resolve_tokens',
+    `Resolve token mint addresses to symbols and names. Pass one or more mint addresses and get back their symbols.
+
+Useful after lavarage_wallet_balance or lavarage_list_positions returns unknown mints. Checks Lavarage's token database first, falls back to well-known mints.`,
+    {
+      mints: z.array(z.string()).min(1).max(20).describe('Array of token mint addresses to resolve'),
+    },
+    async ({ mints }) => {
+      try {
+        const client = getClient()
+        const resolved: Record<string, { symbol: string | null; name: string | null }> = {}
+
+        // Resolve from known mints first
+        const unknown: string[] = []
+        for (const mint of mints) {
+          if (KNOWN_MINTS[mint]) {
+            resolved[mint] = { symbol: KNOWN_MINTS[mint], name: KNOWN_MINTS[mint] }
+          } else {
+            unknown.push(mint)
+          }
+        }
+
+        // Look up remaining from Lavarage token database
+        if (unknown.length > 0) {
+          try {
+            const allTokens = await client.getTokens()
+            const tokenMap = new Map<string, any>()
+            if (Array.isArray(allTokens)) {
+              for (const t of allTokens) {
+                const addr = t.address ?? t.mint
+                if (addr) tokenMap.set(addr, t)
+              }
+            }
+            for (const mint of unknown) {
+              const t = tokenMap.get(mint)
+              if (t) {
+                resolved[mint] = { symbol: t.symbol ?? null, name: t.name ?? null }
+                // Cache for future lookups
+                if (t.symbol) KNOWN_MINTS[mint] = t.symbol
+              } else {
+                resolved[mint] = { symbol: null, name: null }
+              }
+            }
+          } catch {
+            // If token lookup fails, mark all as unresolved
+            for (const mint of unknown) {
+              resolved[mint] = { symbol: null, name: null }
+            }
+          }
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify(resolved, null, 2),
           }],
         }
       } catch (err: any) {
