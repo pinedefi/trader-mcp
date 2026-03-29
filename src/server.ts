@@ -120,14 +120,16 @@ export async function startServer(config: ServerConfig) {
 
   // Authorization Endpoint — redirects to web app for Privy login
   app.get('/authorize', (req, res) => {
+    console.log('GET /authorize params:', JSON.stringify(req.query))
+
     const {
       client_id, redirect_uri, response_type, state,
       code_challenge, code_challenge_method, scope,
     } = req.query as Record<string, string>
 
     // Validate required params
-    if (response_type !== 'code') {
-      res.status(400).json({ error: 'unsupported_response_type' })
+    if (response_type && response_type !== 'code') {
+      res.status(400).json({ error: 'unsupported_response_type', received: response_type })
       return
     }
     if (!client_id || !redirect_uri || !code_challenge) {
