@@ -1,0 +1,115 @@
+import { z } from 'zod'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { LavaApiClient } from '../api-client.js'
+
+export function registerOrderTools(
+  server: McpServer,
+  getClient: () => LavaApiClient,
+) {
+  server.tool(
+    'lavarage_set_tp_sl',
+    'Set a take-profit or stop-loss order on a position. The order will auto-execute when the trigger price is hit.',
+    {
+      positionAddress: z.string().describe('The position account address (base58)'),
+      orderType: z.enum(['TAKE_PROFIT', 'STOP_LOSS']).describe('Order type'),
+      triggerPrice: z.string().describe('Price at which to trigger (e.g. "150.50" in USD)'),
+      side: z.enum(['LONG', 'SHORT']).describe('Position side'),
+      walletId: z.string().optional().describe('Privy wallet ID (required for server-wallet mode auto-execution)'),
+    },
+    async ({ positionAddress, orderType, triggerPrice, side, walletId }) => {
+      try {
+        const client = getClient()
+        const wallet = client.getWalletAddress()
+
+        const result = await client.createOrder({
+          positionAddress,
+          walletId: walletId ?? '',
+          userPublicKey: wallet,
+          orderType,
+          triggerPrice,
+          side,
+        })
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              ...result,
+              message: `${orderType === 'TAKE_PROFIT' ? 'Take-profit' : 'Stop-loss'} set at $${triggerPrice} for position ${positionAddress.slice(0, 8)}...`,
+            }, null, 2),
+          }],
+        }
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text' as const, text: formatError(err) }],
+          isError: true,
+        }
+      }
+    },
+  )
+
+  server.tool(
+    'lavarage_get_orders',
+    'List active take-profit and stop-loss orders. Optionally filter by position.',
+    {
+      positionAddress: z.string().optional().describe('Filter orders for a specific position'),
+    },
+    async ({ positionAddress }) => {
+      try {
+        const orders = await getClient().getOrders(positionAddress)
+
+        if (!Array.isArray(orders) || orders.length === 0) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: 'No active orders found.',
+            }],
+          }
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify(orders, null, 2),
+          }],
+        }
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text' as const, text: formatError(err) }],
+          isError: true,
+        }
+      }
+    },
+  )
+
+  server.tool(
+    'lavarage_cancel_order',
+    'Cancel an active take-profit or stop-loss order.',
+    {
+      orderId: z.string().describe('The order ID to cancel'),
+    },
+    async ({ orderId }) => {
+      try {
+        await getClient().cancelOrder(orderId)
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Order ${orderId} cancelled.`,
+          }],
+        }
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text' as const, text: formatError(err) }],
+          isError: true,
+        }
+      }
+    },
+  )
+}
+
+function formatError(err: any): string {
+  if (err.code && err.message) {
+    return `API Error [${err.code}]: ${err.message}${err.detail ? ` — ${err.detail}` : ''}`
+  }
+  return `Error: ${err.message ?? String(err)}`
+}

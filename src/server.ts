@@ -10,6 +10,9 @@ import { registerLoginTool } from './tools/login.js'
 import { registerMarketTools } from './tools/market.js'
 import { registerPositionTools } from './tools/positions.js'
 import { registerTradeTools } from './tools/trade.js'
+import { registerOrderTools } from './tools/orders.js'
+import { registerHistoryTools } from './tools/history.js'
+import { registerManageTools } from './tools/manage.js'
 
 export interface ServerConfig {
   port: number
@@ -337,6 +340,9 @@ function createMcpServer(sessionId: string, config: ServerConfig): McpServer {
   registerMarketTools(server, getClient)
   registerPositionTools(server, getClient)
   registerTradeTools(server, getClient, getWallet, getMode, config)
+  registerOrderTools(server, getClient)
+  registerHistoryTools(server, getClient)
+  registerManageTools(server, getClient, getWallet, getMode, config)
 
   return server
 }

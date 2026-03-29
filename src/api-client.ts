@@ -73,6 +73,55 @@ export class LavaApiClient {
     return this.post('/api/v1/positions/open-quote', dto)
   }
 
+  // --- Trade History ---
+
+  async getTradeHistory(opts?: {
+    positionAddress?: string
+    eventType?: string
+    limit?: number
+    offset?: number
+  }): Promise<any[]> {
+    const params = new URLSearchParams({ owner: this.wallet })
+    if (opts?.positionAddress) params.set('positionAddress', opts.positionAddress)
+    if (opts?.eventType) params.set('eventType', opts.eventType)
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    if (opts?.offset) params.set('offset', String(opts.offset))
+    return this.get(`/api/v1/positions/trade-history?${params}`)
+  }
+
+  // --- Orders (TP/SL) ---
+
+  async createOrder(dto: {
+    positionAddress: string
+    walletId: string
+    userPublicKey: string
+    orderType: 'TAKE_PROFIT' | 'STOP_LOSS'
+    triggerPrice: string
+    side: 'LONG' | 'SHORT'
+  }): Promise<any> {
+    return this.post('/api/v1/orders', dto)
+  }
+
+  async getOrders(positionAddress?: string): Promise<any[]> {
+    const params = new URLSearchParams({ owner: this.wallet })
+    if (positionAddress) params.set('positionAddress', positionAddress)
+    return this.get(`/api/v1/orders?${params}`)
+  }
+
+  async cancelOrder(orderId: string): Promise<any> {
+    return this.request(`/api/v1/orders/${orderId}`, { method: 'DELETE' })
+  }
+
+  // --- Quotes ---
+
+  async getCloseQuote(dto: {
+    positionAddress: string
+    userPublicKey: string
+    slippageBps?: number
+  }): Promise<any> {
+    return this.post('/api/v1/positions/close-quote', dto)
+  }
+
   // --- Transaction Builders ---
 
   async buildOpenTx(dto: {
@@ -93,6 +142,46 @@ export class LavaApiClient {
     astralaneTipLamports?: number
   }): Promise<any> {
     return this.post('/api/v1/positions/close', dto)
+  }
+
+  async buildRepayTx(dto: {
+    positionAddress: string
+    userPublicKey: string
+  }): Promise<any> {
+    return this.post('/api/v1/positions/repay', dto)
+  }
+
+  async buildPartialRepayTx(dto: {
+    positionAddress: string
+    userPublicKey: string
+    repaymentBps: number
+  }): Promise<any> {
+    return this.post('/api/v1/positions/partial-repay', dto)
+  }
+
+  async buildSplitTx(dto: {
+    positionAddress: string
+    userPublicKey: string
+    splitRatioBps: number
+  }): Promise<any> {
+    return this.post('/api/v1/positions/split', dto)
+  }
+
+  async buildMergeTx(dto: {
+    firstPositionAddress: string
+    secondPositionAddress: string
+    userPublicKey: string
+  }): Promise<any> {
+    return this.post('/api/v1/positions/merge', dto)
+  }
+
+  async buildPartialSellTx(dto: {
+    positionAddress: string
+    userPublicKey: string
+    splitRatioBps: number
+    slippageBps?: number
+  }): Promise<any> {
+    return this.post('/api/v1/positions/partial-sell', dto)
   }
 
   // --- Bundle Submission ---
