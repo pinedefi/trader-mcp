@@ -30,7 +30,7 @@ In "server-wallet" mode: signs and submits the transaction automatically, return
 Collateral can be in SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values under 1000 are treated as SOL.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
-      collateral: z.string().describe('Collateral — in SOL (e.g. "0.5") or lamports (e.g. "500000000")'),
+      collateral: z.string().describe('Initial margin (quote token: SOL or USDC depending on the offer). In SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values under 1000 = SOL.'),
       leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },

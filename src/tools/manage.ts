@@ -249,10 +249,12 @@ In "server-wallet" mode: signs and submits automatically.`,
 
   server.tool(
     'lavarage_increase_borrow',
-    `Increase the borrowed amount on an existing position. Two modes:
+    `Increase leverage on an existing position. Two modes:
 
-- "withdraw": Borrow more quote tokens (SOL/USDC) and receive them in your wallet. Increases LTV.
-- "compound": Borrow more and swap into the base token, increasing your position size. Like adding leverage.
+- "withdraw": Borrow more quote tokens (SOL/USDC) and receive them in your wallet. Increases LTV but gives you liquid funds.
+- "compound": Borrow more quote tokens AND swap them into the base token, adding to your position size. This is like increasing your leverage — your exposure grows but so does liquidation risk.
+
+Use lavarage_increase_borrow_quote first to see max borrowable and projected LTV.
 
 In "unsigned" mode: returns unsigned transaction.
 In "server-wallet" mode: signs and submits automatically.`,
@@ -310,15 +312,19 @@ In "server-wallet" mode: signs and submits automatically.`,
 
   server.tool(
     'lavarage_add_collateral',
-    `Add more collateral to an existing position. Reduces LTV and moves liquidation price further away.
+    `Add more of the traded token (base token) to an existing position. This reduces LTV and moves the liquidation price further away, making the position safer.
 
-Collateral is in the base token's smallest units (e.g. lamports for SOL).
+IMPORTANT: This adds the BASE token (the token you're long on), NOT the quote token.
+For example, on a WBTC/USDC position, you add WBTC (in satoshis). On a cbBTC/SOL position, you add cbBTC.
+You must hold the base token in your wallet. Check lavarage_wallet_balance first.
+
+Amount is in the base token's smallest units (e.g. satoshis for BTC tokens, lamports for SOL).
 
 In "unsigned" mode: returns unsigned transaction.
 In "server-wallet" mode: signs and submits automatically.`,
     {
       positionAddress: z.string().describe('The position account address (base58)'),
-      collateralAmount: z.string().describe('Collateral to add in base token smallest units'),
+      collateralAmount: z.string().describe('Amount of base token to add, in smallest units (e.g. satoshis for WBTC)'),
     },
     async ({ positionAddress, collateralAmount }) => {
       try {
@@ -341,10 +347,12 @@ In "server-wallet" mode: signs and submits automatically.`,
 
   server.tool(
     'lavarage_add_collateral_quote',
-    `Preview the impact of adding collateral. Shows current and projected LTV after adding the specified amount.`,
+    `Preview the impact of adding base token to a position. Shows current and projected LTV after adding the specified amount.
+
+Amount is in the base token's smallest units (e.g. satoshis for BTC, lamports for SOL).`,
     {
       positionAddress: z.string().describe('The position account address (base58)'),
-      collateralAmount: z.string().describe('Collateral to add in base token smallest units'),
+      collateralAmount: z.string().describe('Amount of base token to add, in smallest units'),
     },
     async ({ positionAddress, collateralAmount }) => {
       try {
