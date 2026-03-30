@@ -29,23 +29,74 @@ Status: OPEN/EXECUTED = active position, CLOSED = settled.`,
           }
         }
 
-        const summary = positions.map((p: any) => ({
-          address: p.address,
-          side: p.side,
-          status: p.status,
-          tokenSymbol: p.tokenSymbol ?? p.baseTokenSymbol,
-          quoteSymbol: p.quoteTokenSymbol,
-          collateral: p.collateral,
-          leverage: p.leverage,
-          entryPrice: p.entryPrice,
-          currentPrice: p.currentPrice,
-          liquidationPrice: p.liquidationPrice,
-          unrealizedPnl: p.unrealizedPnl,
-          roiPercent: p.roiPercent,
-          borrowedAmount: p.borrowedAmount,
-          interestAccrued: p.interestAccrued,
-          createdAt: p.createdAt,
-        }))
+        const summary = positions.map((p: any) => {
+          // Compute derived fields from raw position data
+          const baseDecimals = p.baseTokenDecimals ?? 9
+          const quoteDecimals = p.quoteTokenDecimals ?? 9
+          const basePrice = p.baseTokenPrice ? Number(p.baseTokenPrice) : null
+          const quotePrice = p.quoteTokenPrice ? Number(p.quoteTokenPrice) : null
+          const entryPrice = p.entryPrice ? Number(p.entryPrice) : null
+          const leverage = p.leverage ? Number(p.leverage) : null
+          const collateralRaw = p.collateralAmount ? Number(p.collateralAmount) : null
+          const positionSizeRaw = p.positionSize ? Number(p.positionSize) : null
+          const apr = p.offerApr ? Number(p.offerApr) : null
+          const liqLtv = p.offerLiquidationLtv ? Number(p.offerLiquidationLtv) : (p.liquidationLtv ? Number(p.liquidationLtv) : null)
+
+          // Human-readable amounts
+          const collateral = collateralRaw !== null ? collateralRaw / Math.pow(10, quoteDecimals) : null
+          const positionSize = positionSizeRaw !== null ? positionSizeRaw / Math.pow(10, baseDecimals) : null
+
+          // Borrowed = (collateral * leverage) - collateral = collateral * (leverage - 1)
+          const borrowed = (collateral !== null && leverage !== null) ? collateral * (leverage - 1) : null
+
+          // Current price: use base token price / quote token price (both in USD)
+          const currentPrice = (basePrice !== null && quotePrice !== null && quotePrice > 0)
+            ? basePrice / quotePrice
+            : null
+
+          // PnL: (currentPrice - entryPrice) * positionSize (in quote token terms)
+          let unrealizedPnl: number | null = null
+          let roiPercent: number | null = null
+          if (currentPrice !== null && entryPrice !== null && positionSize !== null && collateral !== null && p.side === 'LONG') {
+            unrealizedPnl = (currentPrice - entryPrice) * positionSize
+            roiPercent = collateral > 0 ? (unrealizedPnl / collateral) * 100 : null
+          }
+
+          // Liquidation price (simplified: entryPrice * (1 - 1/(leverage * liqLtv)))
+          let liquidationPrice: number | null = null
+          if (entryPrice !== null && leverage !== null && liqLtv !== null && p.side === 'LONG') {
+            liquidationPrice = entryPrice * (1 - (1 / (leverage * liqLtv)))
+          }
+
+          // Interest: daily cost based on APR
+          const dailyInterest = (borrowed !== null && apr !== null) ? (borrowed * apr / 100 / 365) : null
+
+          return {
+            address: p.address,
+            side: p.side,
+            status: p.status,
+            baseTokenSymbol: p.baseTokenSymbol ?? null,
+            baseTokenName: p.baseTokenName ?? null,
+            quoteTokenSymbol: p.quoteTokenSymbol ?? null,
+            leverage: p.leverage,
+            entryPrice: entryPrice,
+            currentPrice: currentPrice,
+            collateral: collateral,
+            collateralUnit: p.quoteTokenSymbol ?? 'unknown',
+            positionSize: positionSize,
+            positionSizeUnit: p.baseTokenSymbol ?? 'unknown',
+            borrowed: borrowed,
+            unrealizedPnl: unrealizedPnl !== null ? Number(unrealizedPnl.toFixed(6)) : null,
+            roiPercent: roiPercent !== null ? Number(roiPercent.toFixed(2)) : null,
+            liquidationPrice: liquidationPrice !== null ? Number(liquidationPrice.toFixed(6)) : null,
+            apr: apr,
+            dailyInterest: dailyInterest !== null ? Number(dailyInterest.toFixed(6)) : null,
+            closeType: p.closeType ?? null,
+            exitPrice: p.exitPrice ? Number(p.exitPrice) : null,
+            realizedPnl: p.realizedPnl ? Number(p.realizedPnl) : null,
+            createdAt: p.createdAt,
+          }
+        })
 
         return {
           content: [{
