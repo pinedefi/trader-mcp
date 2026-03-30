@@ -55,9 +55,14 @@ export class LavaApiClient {
 
   // --- Offers / Rates ---
 
-  async getOffers(tags?: string): Promise<any[]> {
+  async getOffers(opts?: { tags?: string; search?: string; side?: string; quoteToken?: string; limit?: number; offset?: number }): Promise<any[]> {
     const params = new URLSearchParams({ includeTokens: 'true' })
-    if (tags) params.set('tags', tags)
+    if (opts?.tags) params.set('tags', opts.tags)
+    if (opts?.search) params.set('search', opts.search)
+    if (opts?.side) params.set('side', opts.side)
+    if (opts?.quoteToken) params.set('quoteToken', opts.quoteToken)
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    if (opts?.offset != null) params.set('offset', String(opts.offset))
     return this.get(`/api/v1/offers?${params}`)
   }
 
