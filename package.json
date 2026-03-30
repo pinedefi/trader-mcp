@@ -4,6 +4,11 @@
   "description": "Lavarage Trader MCP — hosted AI agent trading interface for Solana leveraged positions",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./tools": "./dist/tool-definitions.js",
+    "./api-client": "./dist/api-client.js"
+  },
   "bin": {
     "lavarage-trader-mcp": "dist/index.js",
     "lavarage-trader-mcp-local": "dist/local.js"
