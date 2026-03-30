@@ -87,12 +87,12 @@ Workflow: get_rates → get_quote → (user confirms) → open_position (same pa
 The offerPublicKey, collateral, leverage, and slippageBps are reused in open_position.
 
 Collateral = initial margin in quote token (SOL or USDC depending on the offer).
-Values under 1000 are treated as SOL and auto-converted to lamports.
+Collateral must be in the quote token's smallest units: lamports for SOL (1 SOL = 1e9), micro-USDC for USDC (1 USDC = 1e6).
 
 Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, slippageBps.`,
   schema: z.object({
     offerPublicKey: z.string().describe('Offer/pool public key — get this from lavarage_get_rates'),
-    collateral: z.string().describe('Initial margin in quote token: SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values < 1000 = SOL.'),
+    collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
     leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
     slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
   }),
@@ -127,7 +127,7 @@ Position types (determined by the offer):
 - SHORT: Price down = profit. Deposit base token, borrow, sell.
 - BORROW: No directional bet. Borrow tokens against collateral.
 
-Collateral = initial margin in quote token (SOL or USDC). Values < 1000 treated as SOL.
+Collateral = initial margin in quote token (SOL or USDC). 
 
 Outputs:
 - server-wallet mode: returns { signature } — the on-chain TX signature. Trade is done.
@@ -137,7 +137,7 @@ Outputs:
 Warnings: Trades with MEV protection via Astralane. Fees deducted from collateral.`,
   schema: z.object({
     offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
-    collateral: z.string().describe('Initial margin (quote token: SOL or USDC). In SOL (e.g. "0.5") or lamports. Values < 1000 = SOL.'),
+    collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (1 SOL = 1e9), micro-USDC for USDC (1 USDC = 1e6). '),
     leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
     slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
   }),
@@ -185,7 +185,7 @@ Preconditions: Must be authenticated + mode set. Need offerPublicKey from lavara
 Repay anytime with lavarage_repay or lavarage_partial_repay.`,
   schema: z.object({
     offerPublicKey: z.string().describe('Offer/pool public key (look for BORROW offers in lavarage_get_rates)'),
-    collateral: z.string().describe('Collateral in quote token: SOL (e.g. "0.5") or lamports. Values < 1000 = SOL.'),
+    collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
     leverage: z.number().min(1.1).max(10).describe('Borrow ratio — 2x = borrow equal to collateral'),
     slippageBps: z.number().optional().default(50).describe('Slippage in bps'),
   }),

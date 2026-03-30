@@ -4,7 +4,7 @@ import { VersionedTransaction } from '@solana/web3.js'
 import type { LavaApiClient } from '../api-client.js'
 import type { TradingMode } from '../session.js'
 import { getPrivyClient, type ServerConfig } from '../server.js'
-import { toLamports } from './market.js'
+import { toSmallestUnits } from './market.js'
 
 export function registerTradeTools(
   server: McpServer,
@@ -25,7 +25,7 @@ Position types (determined by the offer):
 - SHORT: Price down = profit. Deposit base token, borrow, sell.
 - BORROW: No directional bet. Borrow tokens against collateral.
 
-Collateral = initial margin in quote token (SOL or USDC). Values < 1000 treated as SOL.
+Collateral = initial margin in quote token (SOL or USDC). 
 
 Outputs:
 - server-wallet mode: returns { signature } — the on-chain TX signature. Trade is done.
@@ -35,7 +35,7 @@ Outputs:
 Warnings: Trades with MEV protection via Astralane. Fees deducted from collateral.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
-      collateral: z.string().describe('Initial margin (quote token: SOL or USDC depending on the offer). In SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values under 1000 = SOL.'),
+      collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
       leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },
@@ -45,19 +45,7 @@ Warnings: Trades with MEV protection via Astralane. Fees deducted from collatera
         const wallet = getWallet()
         const client = getClient()
 
-        const collateralAmount = toLamports(collateral)
-
-        // Safety guard (#13 — block, not warn)
-        const collateralSol = Number(collateralAmount) / 1e9
-        if (collateralSol * leverage > config.maxPositionSol) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `BLOCKED: Position size (${collateralSol} SOL x ${leverage}x = ${(collateralSol * leverage).toFixed(1)} SOL) exceeds safety limit of ${config.maxPositionSol} SOL. Reduce collateral or leverage.`,
-            }],
-            isError: true,
-          }
-        }
+        const collateralAmount = toSmallestUnits(collateral)
 
         const { tipLamports } = await client.getTipFloor()
 
@@ -218,7 +206,7 @@ Outputs:
 - unsigned mode: returns { transaction } — base58-encoded TX to sign externally.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates — look for BORROW side offers)'),
-      collateral: z.string().describe('Collateral in quote token: SOL (e.g. "0.5") or lamports. Values < 1000 = SOL.'),
+      collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
       leverage: z.number().min(1.1).max(10).describe('Borrow ratio — 2x = borrow equal to collateral, 3x = borrow 2x collateral'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50)'),
     },
@@ -228,19 +216,7 @@ Outputs:
         const wallet = getWallet()
         const client = getClient()
 
-        const collateralAmount = toLamports(collateral)
-
-        // Safety guard
-        const collateralSol = Number(collateralAmount) / 1e9
-        if (collateralSol * leverage > config.maxPositionSol) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `BLOCKED: Borrow size (${collateralSol} SOL x ${leverage}x = ${(collateralSol * leverage).toFixed(1)} SOL) exceeds safety limit of ${config.maxPositionSol} SOL.`,
-            }],
-            isError: true,
-          }
-        }
+        const collateralAmount = toSmallestUnits(collateral)
 
         const { tipLamports } = await client.getTipFloor()
 

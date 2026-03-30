@@ -161,19 +161,19 @@ Workflow: get_rates → get_quote → (user confirms) → open_position (same pa
 The offerPublicKey, collateral, leverage, and slippageBps are reused in open_position.
 
 Collateral = initial margin in quote token (SOL or USDC depending on the offer).
-Values under 1000 are treated as SOL and auto-converted to lamports.
+Collateral must be in the quote token's smallest units: lamports for SOL (1 SOL = 1e9), micro-USDC for USDC (1 USDC = 1e6).
 
 Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, slippageBps.`,
     {
       offerPublicKey: z.string().describe('Offer/pool public key — get this from lavarage_get_rates'),
-      collateral: z.string().describe('Initial margin in quote token: SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values < 1000 = SOL.'),
+      collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
       leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },
     async ({ offerPublicKey, collateral, leverage, slippageBps }) => {
       try {
         const client = getClient()
-        const collateralLamports = toLamports(collateral)
+        const collateralLamports = toSmallestUnits(collateral)
 
         const quote = await client.getOpenQuote({
           offerPublicKey,
@@ -198,14 +198,16 @@ Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, sl
   )
 }
 
-/** Convert a string amount to lamports. If < 1000, treat as SOL and multiply by 1e9. */
-export function toLamports(amount: string): string {
+/**
+ * Pass through collateral amount. Must be in the quote token's smallest units:
+ * - SOL: lamports (1 SOL = 1,000,000,000 lamports)
+ * - USDC: micro-USDC (1 USDC = 1,000,000)
+ *
+ * The agent must convert human amounts to smallest units based on the quote token.
+ */
+export function toSmallestUnits(amount: string): string {
   const num = Number(amount)
   if (isNaN(num) || num <= 0) throw new Error(`Invalid amount: ${amount}`)
-  // If it looks like SOL (small number), convert to lamports
-  if (num < 1000) {
-    return Math.round(num * 1e9).toString()
-  }
   return Math.round(num).toString()
 }
 
