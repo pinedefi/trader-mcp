@@ -8,10 +8,19 @@ export function registerPositionTools(
 ) {
   server.tool(
     'lavarage_list_positions',
-    `List your open or closed leveraged positions on Lavarage.
+    `List your leveraged positions with full computed data — PnL, liquidation price, interest, token names.
 
-Position sides: LONG (betting price goes up), SHORT (betting price goes down), BORROW (borrowed tokens, no directional bet).
-Status: OPEN/EXECUTED = active position, CLOSED = settled.`,
+Preconditions: Must be authenticated (call lavarage_login first).
+
+Key outputs per position:
+- baseTokenSymbol/quoteTokenSymbol (e.g. "WBTC / USDC")
+- collateral (initial margin in quote token) + positionSize (base tokens held)
+- currentPrice, unrealizedPnl, roiPercent, liquidationPrice
+- borrowed amount, apr, dailyInterest
+- For closed: exitPrice, realizedPnl, closeType (SOLD/TP/SL/LIQUIDATED)
+
+Position sides: LONG (price up = profit), SHORT (price down = profit), BORROW (no directional bet).
+Status: EXECUTED = open/active, CLOSED/CLOSED_EXECUTED = settled, LIQUIDATED = liquidated.`,
     {
       status: z.enum(['OPEN', 'CLOSED', 'ALL']).optional().default('OPEN')
         .describe('Filter by position status (default: OPEN)'),
@@ -115,9 +124,13 @@ Status: OPEN/EXECUTED = active position, CLOSED = settled.`,
 
   server.tool(
     'lavarage_get_position',
-    'Get detailed information about a specific position including PnL, fees, interest, and liquidation price.',
+    `Get detailed information about a specific position.
+
+Preconditions: Must be authenticated. Position must belong to your wallet.
+Input: The on-chain position account address (base58 string, 32-44 chars). Get this from lavarage_list_positions.
+Returns: Same fields as list_positions — PnL, liquidation price, token names, etc.`,
     {
-      positionAddress: z.string().describe('The on-chain position account address (base58)'),
+      positionAddress: z.string().describe('Position account address (base58) — get this from lavarage_list_positions'),
     },
     async ({ positionAddress }) => {
       try {

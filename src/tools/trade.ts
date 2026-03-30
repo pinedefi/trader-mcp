@@ -15,19 +15,24 @@ export function registerTradeTools(
 ) {
   server.tool(
     'lavarage_open_position',
-    `Open a new leveraged trading position on Lavarage.
+    `Open a new leveraged trading position on Lavarage. THIS EXECUTES A REAL TRADE.
 
-Position types (determined by the offer you choose):
-- LONG: Bet the token price goes UP. You deposit SOL/USDC as collateral, borrow more, and buy the token. Profit if price rises.
-- SHORT: Bet the token price goes DOWN. You deposit the token, borrow against it, and sell. Profit if price falls.
-- BORROW: Simply borrow tokens against collateral. No directional bet — used for yield strategies.
+Preconditions: Must be authenticated + mode set. Need offerPublicKey from lavarage_get_rates.
+Recommended: Call lavarage_get_quote first with the same params to preview the trade.
 
-The offer determines the side and token pair. Use lavarage_get_rates to find offers.
+Position types (determined by the offer):
+- LONG: Price up = profit. Deposit quote token (SOL/USDC), borrow more, buy base token.
+- SHORT: Price down = profit. Deposit base token, borrow, sell.
+- BORROW: No directional bet. Borrow tokens against collateral.
 
-In "unsigned" mode: returns the unsigned transaction (base58) for you to sign and submit.
-In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.
+Collateral = initial margin in quote token (SOL or USDC). Values < 1000 treated as SOL.
 
-Collateral can be in SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values under 1000 are treated as SOL.`,
+Outputs:
+- server-wallet mode: returns { signature } — the on-chain TX signature. Trade is done.
+- unsigned mode: returns { transaction } — base58-encoded TX to sign externally.
+- If position size exceeds safety limit: returns error (BLOCKED).
+
+Warnings: Trades with MEV protection via Astralane. Fees deducted from collateral.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
       collateral: z.string().describe('Initial margin (quote token: SOL or USDC depending on the offer). In SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values under 1000 = SOL.'),
@@ -102,16 +107,23 @@ Collateral can be in SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values und
 
   server.tool(
     'lavarage_close_position',
-    `Close an existing leveraged position on Lavarage.
+    `Close an existing leveraged position. THIS EXECUTES A REAL TRADE.
 
-For LONG positions: sells the token back, repays the borrow, returns remaining collateral + profit (or minus loss).
-For SHORT positions: buys the token back, returns it, keeps the difference.
-For BORROW positions: use lavarage_repay instead.
+Preconditions: Must be authenticated + mode set. Position must belong to your wallet.
+Recommended: Call lavarage_close_quote first to preview PnL, fees, and proceeds.
 
-Tip: call lavarage_close_quote first to preview PnL before closing.
+What happens:
+- LONG: Sells base tokens back to quote, repays borrow, returns remaining collateral + profit (or minus loss).
+- SHORT: Buys base tokens back, returns them, keeps the difference.
+- BORROW: Use lavarage_repay instead (this tool won't work for borrows).
 
-In "unsigned" mode: returns the unsigned transaction (base58) for you to sign and submit.
-In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.`,
+Input: positionAddress (base58) — get from lavarage_list_positions.
+
+Outputs:
+- server-wallet mode: returns { signature } — on-chain TX signature. Position is closed.
+- unsigned mode: returns { transaction } — base58-encoded TX to sign externally.
+
+Includes MEV protection via Astralane.`,
     {
       positionAddress: z.string().describe('The on-chain position account address (base58)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),

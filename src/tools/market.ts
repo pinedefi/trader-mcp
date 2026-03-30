@@ -154,14 +154,21 @@ Search examples: "BTC", "SOL", "BONK", "JUP". The search matches token name and 
 
   server.tool(
     'lavarage_get_quote',
-    `Get a leverage trade quote before opening a position. Shows expected swap output, fees, and price impact.
+    `Preview a trade BEFORE opening. Shows expected swap output, price impact, and fees. Does NOT execute anything.
 
-Collateral can be specified in SOL (e.g. "0.5") or lamports (e.g. "500000000"). If the value is less than 1000, it's treated as SOL and auto-converted to lamports.`,
+Preconditions: Must be authenticated. Need an offerPublicKey from lavarage_get_rates.
+Workflow: get_rates → get_quote → (user confirms) → open_position (same params).
+The offerPublicKey, collateral, leverage, and slippageBps are reused in open_position.
+
+Collateral = initial margin in quote token (SOL or USDC depending on the offer).
+Values under 1000 are treated as SOL and auto-converted to lamports.
+
+Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, slippageBps.`,
     {
-      offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
-      collateral: z.string().describe('Collateral amount — in SOL (e.g. "0.5") or lamports (e.g. "500000000")'),
+      offerPublicKey: z.string().describe('Offer/pool public key — get this from lavarage_get_rates'),
+      collateral: z.string().describe('Initial margin in quote token: SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values < 1000 = SOL.'),
       leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
-      slippageBps: z.number().optional().default(50).describe('Slippage tolerance in basis points (default: 50 = 0.5%)'),
+      slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },
     async ({ offerPublicKey, collateral, leverage, slippageBps }) => {
       try {

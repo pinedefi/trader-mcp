@@ -23,7 +23,12 @@ export function registerWalletTools(
 
   server.tool(
     'lavarage_wallet_balance',
-    'Check your wallet balance — SOL and top token holdings. Use this before trading to know how much you can spend.',
+    `Check your wallet balance — SOL and top 10 token holdings.
+
+Preconditions: Must be authenticated.
+Returns: SOL balance (in SOL and lamports), top 10 tokens with amounts and symbols (known tokens auto-resolved, unknown show mint address — use lavarage_resolve_tokens to look them up).
+
+Call this before trading to confirm you have enough quote token (SOL/USDC) for the collateral.`,
     {},
     async () => {
       try {
@@ -112,7 +117,12 @@ Returns a MoonPay link pre-filled with the trader's wallet address. The trader o
 
   server.tool(
     'lavarage_portfolio',
-    'Get a summary of your trading portfolio — open positions count, sides, and recent activity.',
+    `Get a summary of your trading portfolio — open position count by side, total closed, and 5 most recent closed positions with PnL.
+
+Preconditions: Must be authenticated.
+Returns: { openPositions, breakdown: { longs, shorts, borrows }, totalClosed, recentClosed[] }
+
+Use this for a quick overview before diving into lavarage_list_positions for details.`,
     {},
     async () => {
       try {

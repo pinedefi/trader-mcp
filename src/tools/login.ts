@@ -10,7 +10,13 @@ export function registerLoginTool(
 ) {
   server.tool(
     'lavarage_login',
-    `Check your authentication status. With OAuth, you're already authenticated when connected — this tool shows your wallet address and trading mode.`,
+    `Check your authentication status and wallet address.
+
+Preconditions: None — this is the first tool you should call.
+Returns: wallet address, trading mode (server-wallet or unsigned), auth status.
+If not authenticated: reconnect to the MCP server — the OAuth flow will prompt login.
+
+Call this at the start of any session to confirm who you're trading as.`,
     {},
     async () => {
       try {

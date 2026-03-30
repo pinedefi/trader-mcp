@@ -8,7 +8,13 @@ export function registerHistoryTools(
 ) {
   server.tool(
     'lavarage_trade_history',
-    'Get your trade history — past opens, closes, liquidations, and other events.',
+    `Get your trade history — every open, close, liquidation, split, merge, and repay event.
+
+Preconditions: Must be authenticated.
+
+Each event includes: token symbols, entry/exit price, PnL, protocol fee, gas fee, Jito tip, swap amounts, TX signature, and timestamp.
+
+Use this to review past performance, audit fees, or find specific transactions.`,
     {
       positionAddress: z.string().optional().describe('Filter by specific position address'),
       eventType: z.string().optional().describe('Filter by event type (e.g. OPEN, CLOSE, LIQUIDATION)'),
@@ -54,7 +60,13 @@ export function registerHistoryTools(
 
   server.tool(
     'lavarage_close_quote',
-    'Preview the result of closing a position — shows expected PnL, fees, and amount received before you commit.',
+    `Preview the result of closing a position BEFORE committing. Does NOT execute anything.
+
+Preconditions: Must be authenticated. Position must be open and belong to your wallet.
+Input: positionAddress (base58) — get from lavarage_list_positions.
+
+Key outputs: outAmount (quote tokens you'd receive), repayAmount (borrow repaid), fee (protocol fee), priceImpactPct.
+Use this before calling lavarage_close_position to know what you'll get.`,
     {
       positionAddress: z.string().describe('The position account address (base58)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),

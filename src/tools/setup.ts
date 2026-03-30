@@ -10,12 +10,19 @@ export function registerSetupTool(
   server.tool(
     'lavarage_setup',
     isHosted
-      ? `Confirm or check your trading mode. On the hosted server, mode is always "server-wallet" — transactions are signed and submitted automatically via Privy wallet delegation.`
-      : `Choose your trading mode.
+      ? `Check or confirm the trading mode for this session. On the hosted server, mode is always "server-wallet" — all transactions are signed and submitted automatically via Privy wallet delegation.
 
-Mode "unsigned": Lavarage builds the transaction and returns it unsigned (base58). Your agent or app signs and submits it externally. You keep full custody of your keys.
+Preconditions: Must be authenticated (call lavarage_login first).
+Per-session: Mode is set once per SSE connection. Reconnecting starts a new session.
+Returns: wallet address, active mode.`
+      : `Choose the trading mode for this session. Call once after connecting.
 
-Mode "server-wallet": Lavarage signs and submits transactions on your behalf using Privy wallet delegation. Fully hands-off trading via AI agent. Requires Privy wallet with delegation enabled.`,
+Mode "unsigned": Lavarage builds the transaction and returns it as base58. You sign and submit it externally. Full key custody.
+Mode "server-wallet": Lavarage signs and submits via Privy wallet delegation. Hands-off trading.
+
+Preconditions: Must be authenticated (call lavarage_login first).
+Per-session: Mode persists until you disconnect. Call again to change mid-session.
+Returns: wallet address, active mode.`,
     isHosted
       ? {}
       : {
