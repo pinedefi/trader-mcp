@@ -309,7 +309,14 @@ export async function startServer(config: ServerConfig) {
       const auth = authenticateRequest(req)
       const sessionId = req.headers['mcp-session-id'] as string | undefined
 
-      console.log(`POST /mcp sessionId=${sessionId ?? 'NEW'} auth=${auth ? auth.walletAddress : 'none'}`)
+      console.log(`POST /mcp sessionId=${sessionId ?? 'NEW'} auth=${auth ? auth.walletAddress : 'none'} hasAuthHeader=${!!req.headers.authorization}`)
+
+      // If no session exists and no auth token, tell the client to authenticate
+      if (!sessionId && !auth) {
+        res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${config.publicUrl}/.well-known/oauth-protected-resource"`)
+        res.status(401).json({ error: 'unauthorized', error_description: 'Bearer token required' })
+        return
+      }
 
       if (sessionId && mcpTransports.has(sessionId)) {
         const transport = mcpTransports.get(sessionId)!
