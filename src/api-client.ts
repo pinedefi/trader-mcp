@@ -192,6 +192,46 @@ export class LavaApiClient {
     return this.post('/api/v1/positions/partial-sell', dto)
   }
 
+  // --- Position Management: Increase Borrow + Add Collateral ---
+
+  async getIncreaseBorrowQuote(dto: {
+    positionAddress: string
+    userPublicKey: string
+    mode: 'withdraw' | 'compound'
+    additionalBorrowAmount?: string
+    slippageBps?: number
+  }): Promise<any> {
+    return this.post('/api/v1/positions/increase-borrow-quote', dto)
+  }
+
+  async buildIncreaseBorrowTx(dto: {
+    positionAddress: string
+    userPublicKey: string
+    additionalBorrowAmount: string
+    mode: 'withdraw' | 'compound'
+    slippageBps?: number
+    astralaneTipLamports?: number
+  }): Promise<any> {
+    return this.post('/api/v1/positions/increase-borrow', dto)
+  }
+
+  async getAddCollateralQuote(dto: {
+    positionAddress: string
+    userPublicKey: string
+    collateralAmount: string
+  }): Promise<any> {
+    return this.post('/api/v1/positions/add-collateral-quote', dto)
+  }
+
+  async buildAddCollateralTx(dto: {
+    positionAddress: string
+    userPublicKey: string
+    collateralAmount: string
+    astralaneTipLamports?: number
+  }): Promise<any> {
+    return this.post('/api/v1/positions/add-collateral', dto)
+  }
+
   // --- Bundle Submission ---
 
   async submitTransaction(transaction: string, mevProtect = true): Promise<any> {

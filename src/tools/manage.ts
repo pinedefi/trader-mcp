@@ -246,6 +246,118 @@ In "server-wallet" mode: signs and submits automatically.`,
       }
     },
   )
+
+  server.tool(
+    'lavarage_increase_borrow',
+    `Increase the borrowed amount on an existing position. Two modes:
+
+- "withdraw": Borrow more quote tokens (SOL/USDC) and receive them in your wallet. Increases LTV.
+- "compound": Borrow more and swap into the base token, increasing your position size. Like adding leverage.
+
+In "unsigned" mode: returns unsigned transaction.
+In "server-wallet" mode: signs and submits automatically.`,
+    {
+      positionAddress: z.string().describe('The position account address (base58)'),
+      additionalBorrowAmount: z.string().describe('Amount to borrow in quote token smallest units (lamports for SOL)'),
+      mode: z.enum(['withdraw', 'compound']).describe('"withdraw" = receive tokens, "compound" = swap into more base token'),
+      slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (compound mode only)'),
+    },
+    async ({ positionAddress, additionalBorrowAmount, mode: borrowMode, slippageBps }) => {
+      try {
+        const txMode = requireMode(getMode())
+        const wallet = getWallet()
+        const client = getClient()
+        const { tipLamports } = await client.getTipFloor()
+
+        const result = await client.buildIncreaseBorrowTx({
+          positionAddress,
+          userPublicKey: wallet,
+          additionalBorrowAmount,
+          mode: borrowMode,
+          slippageBps,
+          astralaneTipLamports: tipLamports,
+        })
+
+        return handleTxResult(txMode, result, 'Increase borrow', wallet, config)
+      } catch (err: any) {
+        return { content: [{ type: 'text' as const, text: formatError(err) }], isError: true }
+      }
+    },
+  )
+
+  server.tool(
+    'lavarage_increase_borrow_quote',
+    `Preview the impact of increasing borrow. Shows max borrowable, current/projected LTV, fee, and swap quote (compound mode).`,
+    {
+      positionAddress: z.string().describe('The position account address (base58)'),
+      mode: z.enum(['withdraw', 'compound']).describe('"withdraw" or "compound"'),
+      additionalBorrowAmount: z.string().optional().describe('Amount to borrow (omit to see max borrowable)'),
+      slippageBps: z.number().optional().default(50).describe('Slippage in bps (compound only)'),
+    },
+    async ({ positionAddress, mode: borrowMode, additionalBorrowAmount, slippageBps }) => {
+      try {
+        const client = getClient()
+        const quote = await client.getIncreaseBorrowQuote({
+          positionAddress, userPublicKey: client.getWalletAddress(),
+          mode: borrowMode, additionalBorrowAmount, slippageBps,
+        })
+        return { content: [{ type: 'text' as const, text: JSON.stringify(quote, null, 2) }] }
+      } catch (err: any) {
+        return { content: [{ type: 'text' as const, text: formatError(err) }], isError: true }
+      }
+    },
+  )
+
+  server.tool(
+    'lavarage_add_collateral',
+    `Add more collateral to an existing position. Reduces LTV and moves liquidation price further away.
+
+Collateral is in the base token's smallest units (e.g. lamports for SOL).
+
+In "unsigned" mode: returns unsigned transaction.
+In "server-wallet" mode: signs and submits automatically.`,
+    {
+      positionAddress: z.string().describe('The position account address (base58)'),
+      collateralAmount: z.string().describe('Collateral to add in base token smallest units'),
+    },
+    async ({ positionAddress, collateralAmount }) => {
+      try {
+        const txMode = requireMode(getMode())
+        const wallet = getWallet()
+        const client = getClient()
+        const { tipLamports } = await client.getTipFloor()
+
+        const result = await client.buildAddCollateralTx({
+          positionAddress, userPublicKey: wallet, collateralAmount,
+          astralaneTipLamports: tipLamports,
+        })
+
+        return handleTxResult(txMode, result, 'Add collateral', wallet, config)
+      } catch (err: any) {
+        return { content: [{ type: 'text' as const, text: formatError(err) }], isError: true }
+      }
+    },
+  )
+
+  server.tool(
+    'lavarage_add_collateral_quote',
+    `Preview the impact of adding collateral. Shows current and projected LTV after adding the specified amount.`,
+    {
+      positionAddress: z.string().describe('The position account address (base58)'),
+      collateralAmount: z.string().describe('Collateral to add in base token smallest units'),
+    },
+    async ({ positionAddress, collateralAmount }) => {
+      try {
+        const client = getClient()
+        const quote = await client.getAddCollateralQuote({
+          positionAddress, userPublicKey: client.getWalletAddress(), collateralAmount,
+        })
+        return { content: [{ type: 'text' as const, text: JSON.stringify(quote, null, 2) }] }
+      } catch (err: any) {
+        return { content: [{ type: 'text' as const, text: formatError(err) }], isError: true }
+      }
+    },
+  )
 }
 
 function requireMode(mode: TradingMode | null): TradingMode {
