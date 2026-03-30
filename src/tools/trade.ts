@@ -35,7 +35,7 @@ Outputs:
 Warnings: Trades with MEV protection via Astralane. Fees deducted from collateral.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
-      collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
+      collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
       leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },
@@ -206,7 +206,7 @@ Outputs:
 - unsigned mode: returns { transaction } — base58-encoded TX to sign externally.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates — look for BORROW side offers)'),
-      collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
+      collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
       leverage: z.number().min(1.1).max(10).describe('Borrow ratio — 2x = borrow equal to collateral, 3x = borrow 2x collateral'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50)'),
     },

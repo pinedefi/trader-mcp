@@ -161,12 +161,12 @@ Workflow: get_rates → get_quote → (user confirms) → open_position (same pa
 The offerPublicKey, collateral, leverage, and slippageBps are reused in open_position.
 
 Collateral = initial margin in quote token (SOL or USDC depending on the offer).
-Collateral must be in the quote token's smallest units: lamports for SOL (1 SOL = 1e9), micro-USDC for USDC (1 USDC = 1e6).
+Collateral accepts two formats: "5 USDC" or "0.05 SOL" (auto-converted), or raw smallest units like "5000000".
 
 Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, slippageBps.`,
     {
       offerPublicKey: z.string().describe('Offer/pool public key — get this from lavarage_get_rates'),
-      collateral: z.string().describe('Collateral in quote token smallest units: lamports for SOL (e.g. "50000000" = 0.05 SOL), micro-USDC for USDC (e.g. "5000000" = 5 USDC). '),
+      collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
       leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },
@@ -205,9 +205,30 @@ Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, sl
  *
  * The agent must convert human amounts to smallest units based on the quote token.
  */
+/**
+ * Parse collateral amount to smallest units. Accepts:
+ *   "5000000"       → 5000000 (already smallest units, no token suffix)
+ *   "3 USDC"        → 3000000 (human amount × 1e6)
+ *   "3USDC"         → 3000000
+ *   "0.05 SOL"      → 50000000 (human amount × 1e9)
+ *   "0.05SOL"       → 50000000
+ *   "0.05 WSOL"     → 50000000
+ *
+ * Rule: if a token suffix is present, convert from human units.
+ *       if no suffix, pass through as-is (already smallest units).
+ */
 export function toSmallestUnits(amount: string): string {
-  const num = Number(amount)
+  const trimmed = amount.trim()
+  const match = trimmed.match(/^([0-9]*\.?[0-9]+)\s*(SOL|WSOL|USDC|usdc|sol|wsol)?$/i)
+  if (!match) throw new Error(`Invalid collateral: "${amount}". Use "5 USDC", "0.05 SOL", or raw units like "5000000".`)
+
+  const num = Number(match[1])
   if (isNaN(num) || num <= 0) throw new Error(`Invalid amount: ${amount}`)
+
+  const token = (match[2] ?? '').toUpperCase()
+  if (token === 'SOL' || token === 'WSOL') return Math.round(num * 1e9).toString()
+  if (token === 'USDC') return Math.round(num * 1e6).toString()
+  // No suffix = already in smallest units
   return Math.round(num).toString()
 }
 
