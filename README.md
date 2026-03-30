@@ -53,17 +53,22 @@ The server starts at `http://localhost:3100` with:
 | `LAVARAGE_MAX_POSITION_SOL` | No | Max position size safety limit (default: 10 SOL) |
 | `PORT` | No | Server port (default: 3100) |
 
-## Connecting from Claude Desktop
+## Connecting Your AI Agent
+
+Add to your MCP config (`.mcp.json`, `claude_desktop_config.json`, or equivalent):
 
 ```json
 {
   "mcpServers": {
     "lavarage": {
-      "url": "https://mcp.lavarage.xyz/sse"
+      "type": "http",
+      "url": "https://mcp.lavarage.xyz/mcp"
     }
   }
 }
 ```
+
+Works with any MCP-compatible client: Claude Code, Claude Desktop, OpenCode, Cursor, etc.
 
 ## Security
 

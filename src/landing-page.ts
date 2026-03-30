@@ -121,7 +121,7 @@ export function renderLandingPage(publicUrl: string): string {
     <!-- Quick Install -->
     <div class="section">
       <h2>Quick Install</h2>
-      <p>Open Claude Code (or Claude Desktop) and paste one of these. Claude does the rest.</p>
+      <p>Open your AI coding agent and paste one of these. The agent does the rest.</p>
 
       <div class="install-card">
         <div class="install-header">
@@ -129,7 +129,7 @@ export function renderLandingPage(publicUrl: string): string {
           <p>We handle wallet creation and signing. Just log in with email.</p>
         </div>
         <div class="install-prompt" onclick="copyToClipboard(this)">
-          <span class="install-text">Install Lavarage MCP: add a "lavarage" MCP server to the project .mcp.json with type "http" and url "${publicUrl}/mcp". That's it — the OAuth flow will handle authentication when I use any trading tool.</span>
+          <span class="install-text">Install Lavarage MCP: add a "lavarage" MCP server to the project MCP config with type "http" and url "${publicUrl}/mcp". That's it — the OAuth flow will handle authentication when I use any trading tool.</span>
           <span class="copy-btn" title="Click to copy">Copy</span>
         </div>
       </div>
@@ -140,7 +140,7 @@ export function renderLandingPage(publicUrl: string): string {
           <p>Run on your machine with your own Solana keypair. Full control.</p>
         </div>
         <div class="install-prompt" onclick="copyToClipboard(this)">
-          <span class="install-text">Install Lavarage MCP: run \`npm install -g @lavarage/trader-mcp\` then add a "lavarage" MCP server to my Claude config with command "lavarage-trader-mcp-local" and env var LAVARAGE_KEYPAIR_PATH set to my Solana keypair file path (ask me where mine is). The API key and URL are built in — no configuration needed.</span>
+          <span class="install-text">Install Lavarage MCP: run \`npm install -g @lavarage/trader-mcp\` then add a "lavarage" MCP server to the project MCP config with command "lavarage-trader-mcp-local" and env var LAVARAGE_KEYPAIR_PATH set to my Solana keypair file path (ask me where mine is). The API key and URL are built in — no configuration needed.</span>
           <span class="copy-btn" title="Click to copy">Copy</span>
         </div>
       </div>
@@ -151,7 +151,7 @@ export function renderLandingPage(publicUrl: string): string {
       <h2>Manual Config</h2>
       <p>If you prefer to edit the config files directly:</p>
 
-      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Hosted — .mcp.json</h3>
+      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Hosted — MCP config (e.g. .mcp.json)</h3>
       <div class="code-block">
         {<br>
         &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
@@ -163,7 +163,7 @@ export function renderLandingPage(publicUrl: string): string {
         }
       </div>
 
-      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Local — claude_desktop_config.json</h3>
+      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Local — MCP config</h3>
       <div class="code-block">
         {<br>
         &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
