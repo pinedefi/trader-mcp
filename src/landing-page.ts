@@ -129,7 +129,7 @@ export function renderLandingPage(publicUrl: string): string {
           <p>We handle wallet creation and signing. Just log in with email.</p>
         </div>
         <div class="install-prompt" onclick="copyToClipboard(this)">
-          <span class="install-text">Install Lavarage MCP: add a "lavarage" MCP server to the project MCP config with type "http" and url "${publicUrl}/mcp". That's it — the OAuth flow will handle authentication when I use any trading tool.</span>
+          <span class="install-text">Install Lavarage MCP: add a "lavarage" MCP server to the project MCP config. The server URL is ${publicUrl}/mcp (Streamable HTTP transport). The OAuth flow will handle authentication when I use any trading tool.</span>
           <span class="copy-btn" title="Click to copy">Copy</span>
         </div>
       </div>
@@ -151,12 +151,14 @@ export function renderLandingPage(publicUrl: string): string {
       <h2>Manual Config</h2>
       <p>If you prefer to edit the config files directly:</p>
 
-      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Hosted — MCP config (e.g. .mcp.json)</h3>
+      <h3 style="font-size: 0.9rem; color: #aaa; margin-bottom: 0.5rem;">Hosted — Streamable HTTP</h3>
       <div class="code-block">
+        <span class="comment">// Server URL (Streamable HTTP transport with OAuth):</span><br>
+        <span class="str">${publicUrl}/mcp</span><br><br>
+        <span class="comment">// Example .mcp.json (adapt for your MCP client):</span><br>
         {<br>
         &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
         &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"lavarage"</span>: {<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"type"</span>: <span class="str">"http"</span>,<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"url"</span>: <span class="str">"${publicUrl}/mcp"</span><br>
         &nbsp;&nbsp;&nbsp;&nbsp;}<br>
         &nbsp;&nbsp;}<br>

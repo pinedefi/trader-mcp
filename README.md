@@ -55,13 +55,16 @@ The server starts at `http://localhost:3100` with:
 
 ## Connecting Your AI Agent
 
-Add to your MCP config (`.mcp.json`, `claude_desktop_config.json`, or equivalent):
+Server URL (Streamable HTTP transport with OAuth):
+```
+https://mcp.lavarage.xyz/mcp
+```
 
+Example MCP config (adapt for your client):
 ```json
 {
   "mcpServers": {
     "lavarage": {
-      "type": "http",
       "url": "https://mcp.lavarage.xyz/mcp"
     }
   }
