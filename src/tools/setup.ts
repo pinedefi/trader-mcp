@@ -5,20 +5,25 @@ import { getSession, updateSessionMode, type TradingMode } from '../session.js'
 export function registerSetupTool(
   server: McpServer,
   getSessionId: () => string,
+  isHosted: boolean = true,
 ) {
   server.tool(
     'lavarage_setup',
-    `Choose your trading mode. Call this after lavarage_login.
+    isHosted
+      ? `Confirm or check your trading mode. On the hosted server, mode is always "server-wallet" — transactions are signed and submitted automatically via Privy wallet delegation.`
+      : `Choose your trading mode.
 
 Mode "unsigned": Lavarage builds the transaction and returns it unsigned (base64). Your agent or app signs and submits it externally. You keep full custody of your keys.
 
 Mode "server-wallet": Lavarage signs and submits transactions on your behalf using Privy wallet delegation. Fully hands-off trading via AI agent. Requires Privy wallet with delegation enabled.`,
-    {
-      mode: z.enum(['unsigned', 'server-wallet']).describe(
-        'Trading mode: "unsigned" = returns unsigned TXs for you to sign, "server-wallet" = Lavarage signs via Privy delegation',
-      ),
-    },
-    async ({ mode }) => {
+    isHosted
+      ? {}
+      : {
+          mode: z.enum(['unsigned', 'server-wallet']).describe(
+            'Trading mode: "unsigned" = returns unsigned TXs for you to sign, "server-wallet" = Lavarage signs via Privy delegation',
+          ),
+        },
+    async (args: any) => {
       try {
         const session = getSession(getSessionId())
         if (!session) {
@@ -31,6 +36,8 @@ Mode "server-wallet": Lavarage signs and submits transactions on your behalf usi
           }
         }
 
+        // Hosted mode: always server-wallet
+        const mode = isHosted ? 'server-wallet' : (args.mode ?? 'unsigned')
         updateSessionMode(getSessionId(), mode as TradingMode)
 
         const modeDesc = mode === 'unsigned'
@@ -44,7 +51,7 @@ Mode "server-wallet": Lavarage signs and submits transactions on your behalf usi
               status: 'configured',
               wallet: session.walletAddress,
               mode,
-              message: `Trading mode set to "${mode}". ${modeDesc} You're ready to trade!`,
+              message: `Trading mode: "${mode}". ${modeDesc}`,
             }, null, 2),
           }],
         }

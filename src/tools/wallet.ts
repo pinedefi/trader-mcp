@@ -81,6 +81,36 @@ export function registerWalletTools(
   )
 
   server.tool(
+    'lavarage_fund_wallet',
+    `Get a link to buy SOL for your wallet. Use this when the trader has no SOL or needs more to open a position.
+
+Returns a MoonPay link pre-filled with the trader's wallet address. The trader opens this in their browser to buy SOL with a credit card or bank transfer.`,
+    {},
+    async () => {
+      try {
+        const wallet = getClient().getWalletAddress()
+        const moonpayUrl = `https://buy.moonpay.com/?apiKey=pk_live_123&currencyCode=sol&walletAddress=${wallet}&colorCode=%23F56506`
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              wallet,
+              fundingUrl: moonpayUrl,
+              message: `Your wallet ${wallet} needs SOL to trade. Open this link to buy SOL:\n\n${moonpayUrl}`,
+            }, null, 2),
+          }],
+        }
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: ${err.message}` }],
+          isError: true,
+        }
+      }
+    },
+  )
+
+  server.tool(
     'lavarage_portfolio',
     'Get a summary of your trading portfolio — open positions count, sides, and recent activity.',
     {},

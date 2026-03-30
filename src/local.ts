@@ -106,7 +106,7 @@ server.tool(
   }),
 )
 
-registerSetupTool(server, () => sessionId)
+registerSetupTool(server, () => sessionId, false)
 registerMarketTools(server, getClient)
 registerPositionTools(server, getClient)
 registerTradeTools(server, getClient, () => walletAddress, () => 'unsigned', config)

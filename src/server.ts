@@ -454,7 +454,7 @@ function createMcpServer(transport: StreamableHTTPServerTransport, config: Serve
   })
 
   registerLoginTool(server, () => getSessionId(), config)
-  registerSetupTool(server, () => getSessionId())
+  registerSetupTool(server, () => getSessionId(), true)
   registerMarketTools(server, getClient)
   registerPositionTools(server, getClient)
   registerTradeTools(server, getClient, getWallet, getMode, config)
