@@ -318,7 +318,7 @@ export async function startServer(config: ServerConfig) {
           createSession(sessionId, {
             privyUserId: auth.privyUserId,
             walletAddress: auth.walletAddress,
-            mode: (auth.mode as TradingMode) ?? null,
+            mode: (auth.mode as TradingMode) ?? 'server-wallet',
             createdAt: new Date(),
           })
         }
@@ -352,7 +352,7 @@ export async function startServer(config: ServerConfig) {
           createSession(transport.sessionId, {
             privyUserId: auth.privyUserId,
             walletAddress: auth.walletAddress,
-            mode: (auth.mode as TradingMode) ?? null,
+            mode: (auth.mode as TradingMode) ?? 'server-wallet',
             createdAt: new Date(),
           })
         }
