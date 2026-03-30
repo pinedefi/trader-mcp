@@ -80,7 +80,7 @@ export class LavaApiClient {
     eventType?: string
     limit?: number
     offset?: number
-  }): Promise<any[]> {
+  }): Promise<any> {
     const params = new URLSearchParams({ owner: this.wallet })
     if (opts?.positionAddress) params.set('positionAddress', opts.positionAddress)
     if (opts?.eventType) params.set('eventType', opts.eventType)
@@ -90,6 +90,7 @@ export class LavaApiClient {
   }
 
   // --- Orders (TP/SL) ---
+  // Orders require wallet signature headers in addition to API key
 
   async createOrder(dto: {
     positionAddress: string
@@ -98,8 +99,12 @@ export class LavaApiClient {
     orderType: 'TAKE_PROFIT' | 'STOP_LOSS'
     triggerPrice: string
     side: 'LONG' | 'SHORT'
-  }): Promise<any> {
-    return this.post('/api/v1/orders', dto)
+  }, walletSigHeaders?: Record<string, string>): Promise<any> {
+    return this.request('/api/v1/orders', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+      headers: walletSigHeaders,
+    })
   }
 
   async getOrders(positionAddress?: string): Promise<any[]> {
@@ -108,8 +113,11 @@ export class LavaApiClient {
     return this.get(`/api/v1/orders?${params}`)
   }
 
-  async cancelOrder(orderId: string): Promise<any> {
-    return this.request(`/api/v1/orders/${orderId}`, { method: 'DELETE' })
+  async cancelOrder(orderId: string, walletSigHeaders?: Record<string, string>): Promise<any> {
+    return this.request(`/api/v1/orders/${orderId}`, {
+      method: 'DELETE',
+      headers: walletSigHeaders,
+    })
   }
 
   // --- Quotes ---

@@ -110,7 +110,7 @@ registerSetupTool(server, () => sessionId, false)
 registerMarketTools(server, getClient)
 registerPositionTools(server, getClient)
 registerTradeTools(server, getClient, () => walletAddress, () => 'unsigned', config)
-registerOrderTools(server, getClient)
+registerOrderTools(server, getClient, config)
 registerHistoryTools(server, getClient)
 registerManageTools(server, getClient, () => walletAddress, () => 'unsigned', config)
 

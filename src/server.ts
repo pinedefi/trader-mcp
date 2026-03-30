@@ -458,7 +458,7 @@ function createMcpServer(transport: StreamableHTTPServerTransport, config: Serve
   registerMarketTools(server, getClient)
   registerPositionTools(server, getClient)
   registerTradeTools(server, getClient, getWallet, getMode, config)
-  registerOrderTools(server, getClient)
+  registerOrderTools(server, getClient, config)
   registerHistoryTools(server, getClient)
   registerManageTools(server, getClient, getWallet, getMode, config)
   registerWalletTools(server, getClient, config.solanaRpcUrl)

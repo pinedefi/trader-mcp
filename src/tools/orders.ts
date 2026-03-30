@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { LavaApiClient } from '../api-client.js'
+import { getPrivyClient, type ServerConfig } from '../server.js'
 
 export function registerOrderTools(
   server: McpServer,
   getClient: () => LavaApiClient,
+  config: ServerConfig,
 ) {
   server.tool(
     'lavarage_set_tp_sl',
@@ -20,23 +22,25 @@ STOP_LOSS: closes the position to limit losses.
     {
       positionAddress: z.string().describe('The position account address (base58)'),
       orderType: z.enum(['TAKE_PROFIT', 'STOP_LOSS']).describe('Order type'),
-      triggerPrice: z.string().describe('Price at which to trigger (e.g. "150.50" in USD)'),
+      triggerPrice: z.string().describe('Price at which to trigger (e.g. "150.50")'),
       side: z.enum(['LONG', 'SHORT']).describe('Position side'),
-      walletId: z.string().optional().describe('Privy wallet ID (required for server-wallet mode auto-execution)'),
     },
-    async ({ positionAddress, orderType, triggerPrice, side, walletId }) => {
+    async ({ positionAddress, orderType, triggerPrice, side }) => {
       try {
         const client = getClient()
         const wallet = client.getWalletAddress()
 
+        // Sign a wallet message for the orders API (requires WalletSignatureGuard)
+        const sigHeaders = await signWalletMessage(wallet, config)
+
         const result = await client.createOrder({
           positionAddress,
-          walletId: walletId ?? '',
+          walletId: '', // Server-side signing uses the quorum, not walletId
           userPublicKey: wallet,
           orderType,
           triggerPrice,
           side,
-        })
+        }, sigHeaders)
 
         return {
           content: [{
@@ -98,7 +102,11 @@ STOP_LOSS: closes the position to limit losses.
     },
     async ({ orderId }) => {
       try {
-        await getClient().cancelOrder(orderId)
+        const client = getClient()
+        const wallet = client.getWalletAddress()
+        const sigHeaders = await signWalletMessage(wallet, config)
+
+        await client.cancelOrder(orderId, sigHeaders)
         return {
           content: [{
             type: 'text' as const,
@@ -113,6 +121,32 @@ STOP_LOSS: closes the position to limit losses.
       }
     },
   )
+}
+
+/**
+ * Sign a wallet message via Privy for the WalletSignatureGuard.
+ * Message format: "lavarage:<walletAddress>:<timestamp>"
+ */
+async function signWalletMessage(
+  walletAddress: string,
+  config: ServerConfig,
+): Promise<Record<string, string>> {
+  const privyClient = await getPrivyClient(config)
+  const timestamp = Date.now().toString()
+  const message = `lavarage:${walletAddress}:${timestamp}`
+
+  const result = await privyClient.walletApi.solana.signMessage({
+    address: walletAddress,
+    chainType: 'solana',
+    message,
+  })
+
+  // Privy returns { signature: string } — the signature is base58 encoded
+  return {
+    'x-wallet-address': walletAddress,
+    'x-wallet-signature': result.signature,
+    'x-wallet-message': message,
+  }
 }
 
 function formatError(err: any): string {

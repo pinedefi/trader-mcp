@@ -17,14 +17,18 @@ export function registerHistoryTools(
     },
     async ({ positionAddress, eventType, limit, offset }) => {
       try {
-        const events = await getClient().getTradeHistory({
+        const result = await getClient().getTradeHistory({
           positionAddress,
           eventType,
           limit,
           offset,
         })
 
-        if (!Array.isArray(events) || events.length === 0) {
+        // API returns { rows: [...], total: N }
+        const rows = result?.rows ?? (Array.isArray(result) ? result : [])
+        const total = result?.total ?? rows.length
+
+        if (rows.length === 0) {
           return {
             content: [{
               type: 'text' as const,
@@ -36,7 +40,7 @@ export function registerHistoryTools(
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(events, null, 2),
+            text: JSON.stringify({ total, showing: rows.length, events: rows }, null, 2),
           }],
         }
       } catch (err: any) {
