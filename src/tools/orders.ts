@@ -33,9 +33,17 @@ STOP_LOSS: closes the position to limit losses.
         // Sign a wallet message for the orders API (requires WalletSignatureGuard)
         const sigHeaders = await signWalletMessage(wallet, config)
 
+        // Get Privy walletId for server-side TP/SL auto-execution
+        const privyClient = await getPrivyClient(config)
+        const user = await privyClient.getUserByWalletAddress(wallet)
+        const embeddedWallet = user?.linkedAccounts?.find(
+          (a: any) => a.type === 'wallet' && a.walletClientType === 'privy' && a.chainType === 'solana',
+        )
+        const walletId = embeddedWallet?.id ?? ''
+
         const result = await client.createOrder({
           positionAddress,
-          walletId: '', // Server-side signing uses the quorum, not walletId
+          walletId,
           userPublicKey: wallet,
           orderType,
           triggerPrice,
