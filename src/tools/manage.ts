@@ -55,18 +55,60 @@ If the close step fails after the split succeeds, you will have two separate pos
           }
         }
 
-        // Server-wallet: sign both and submit as bundle
-        const txSig = await signAndSubmitViaPrivy(result.splitTransaction, wallet, config)
-        const txSig2 = await signAndSubmitViaPrivy(result.closeTransaction, wallet, config)
+        // Server-wallet: sign all TXs via Privy, submit as Jito bundle
+        const privyClient = await getPrivyClient(config)
+        const bs58mod = await import('bs58')
+
+        // Build tip TX
+        const { Connection, PublicKey: PK, SystemProgram, TransactionMessage, VersionedTransaction: VTX } = await import('@solana/web3.js')
+        const conn = new Connection(config.solanaRpcUrl)
+        const { tipLamports } = await client.getTipFloor()
+        const { blockhash } = await conn.getLatestBlockhash('confirmed')
+
+        const tipAccounts = [
+          'astrazznxsGUhWShqgNtAdfrzP2G83DzcWVJDxwV9bF',
+          'astra4uejePWneqNaJKuFFA8oonqCE1sqF6b45kDMZm',
+        ]
+        const tipAccount = tipAccounts[Math.floor(Math.random() * tipAccounts.length)]
+        const tipMsg = new TransactionMessage({
+          payerKey: new PK(wallet),
+          recentBlockhash: blockhash,
+          instructions: [SystemProgram.transfer({ fromPubkey: new PK(wallet), toPubkey: new PK(tipAccount), lamports: tipLamports })],
+        }).compileToV0Message()
+        const tipTx = new VTX(tipMsg)
+
+        // Deserialize split + close
+        const splitTx = VTX.deserialize(bs58mod.default.decode(result.splitTransaction))
+        const closeTx = VTX.deserialize(bs58mod.default.decode(result.closeTransaction))
+
+        // Sign all 3 via Privy
+        const [signedTip, signedSplit, signedClose] = await Promise.all([
+          privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: tipTx }),
+          privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: splitTx }),
+          privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: closeTx }),
+        ])
+
+        // Serialize signed TXs to base64 for bundle submission
+        const toBase64 = (signedResult: any) => {
+          const tx = signedResult.signedTransaction ?? signedResult.transaction ?? signedResult
+          const bytes = tx instanceof Uint8Array ? tx : tx.serialize()
+          return Buffer.from(bytes).toString('base64')
+        }
+
+        // Submit as Jito bundle
+        const bundleRes = await client.submitBundle([
+          toBase64(signedTip),
+          toBase64(signedSplit),
+          toBase64(signedClose),
+        ])
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
               mode: 'server-wallet',
-              splitSignature: txSig,
-              closeSignature: txSig2,
-              message: `Sold ${sellPercent}% of position. Split TX: ${txSig}, Close TX: ${txSig2}`,
+              bundleId: bundleRes.result,
+              message: `Sold ${sellPercent}% of position via Jito bundle.`,
             }, null, 2),
           }],
         }

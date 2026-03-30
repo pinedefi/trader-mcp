@@ -198,6 +198,10 @@ export class LavaApiClient {
     return this.post('/api/v1/bundle/submit', { transaction, mevProtect })
   }
 
+  async submitBundle(transactions: string[]): Promise<any> {
+    return this.post('/api/v1/bundle', { transactions })
+  }
+
   async getTipFloor(): Promise<{ tipLamports: number }> {
     return this.get('/api/v1/bundle/tip')
   }
