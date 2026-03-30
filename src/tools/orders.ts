@@ -132,6 +132,7 @@ async function signWalletMessage(
   config: ServerConfig,
 ): Promise<Record<string, string>> {
   const privyClient = await getPrivyClient(config)
+  const bs58 = await import('bs58')
   const timestamp = Date.now().toString()
   const message = `lavarage:${walletAddress}:${timestamp}`
 
@@ -141,10 +142,15 @@ async function signWalletMessage(
     message,
   })
 
-  // Privy returns { signature: string } — the signature is base58 encoded
+  // Privy returns { signature: Uint8Array (64 bytes) } — encode to base58 for the header
+  const sigBytes = result.signature instanceof Uint8Array
+    ? result.signature
+    : new Uint8Array(Object.values(result.signature))
+  const sigBase58 = bs58.default.encode(sigBytes)
+
   return {
     'x-wallet-address': walletAddress,
-    'x-wallet-signature': result.signature,
+    'x-wallet-signature': sigBase58,
     'x-wallet-message': message,
   }
 }
