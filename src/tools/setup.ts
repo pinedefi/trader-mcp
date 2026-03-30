@@ -13,7 +13,7 @@ export function registerSetupTool(
       ? `Confirm or check your trading mode. On the hosted server, mode is always "server-wallet" — transactions are signed and submitted automatically via Privy wallet delegation.`
       : `Choose your trading mode.
 
-Mode "unsigned": Lavarage builds the transaction and returns it unsigned (base64). Your agent or app signs and submits it externally. You keep full custody of your keys.
+Mode "unsigned": Lavarage builds the transaction and returns it unsigned (base58). Your agent or app signs and submits it externally. You keep full custody of your keys.
 
 Mode "server-wallet": Lavarage signs and submits transactions on your behalf using Privy wallet delegation. Fully hands-off trading via AI agent. Requires Privy wallet with delegation enabled.`,
     isHosted
@@ -41,7 +41,7 @@ Mode "server-wallet": Lavarage signs and submits transactions on your behalf usi
         updateSessionMode(getSessionId(), mode as TradingMode)
 
         const modeDesc = mode === 'unsigned'
-          ? 'Transactions will be returned unsigned (base64). Your agent signs and submits them.'
+          ? 'Transactions will be returned unsigned (base58). Your agent signs and submits them.'
           : 'Transactions will be signed and submitted automatically via Privy wallet delegation.'
 
         return {

@@ -248,7 +248,7 @@ async function handleTxResult(
 }
 
 async function signAndSubmitViaPrivy(
-  transactionBase64: string,
+  transactionBase58: string,
   walletAddress: string,
   config: ServerConfig,
 ): Promise<string> {
@@ -258,7 +258,8 @@ async function signAndSubmitViaPrivy(
 
   const privyClient = await getPrivyClient(config)
 
-  const txBuffer = Buffer.from(transactionBase64, 'base64')
+  const bs58 = await import('bs58')
+  const txBuffer = Buffer.from(bs58.default.decode(transactionBase58))
   const tx = VersionedTransaction.deserialize(txBuffer)
 
   const timeout = new Promise<never>((_, reject) =>

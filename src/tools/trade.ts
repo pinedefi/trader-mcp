@@ -24,7 +24,7 @@ Position types (determined by the offer you choose):
 
 The offer determines the side and token pair. Use lavarage_get_rates to find offers.
 
-In "unsigned" mode: returns the unsigned transaction (base64) for you to sign and submit.
+In "unsigned" mode: returns the unsigned transaction (base58) for you to sign and submit.
 In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.
 
 Collateral can be in SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values under 1000 are treated as SOL.`,
@@ -73,7 +73,7 @@ Collateral can be in SOL (e.g. "0.5") or lamports (e.g. "500000000"). Values und
                 mode: 'unsigned',
                 transaction: result.transaction,
                 lastValidBlockHeight: result.lastValidBlockHeight,
-                message: 'Transaction built. Sign this base64-encoded transaction with your wallet and submit it.',
+                message: 'Transaction built. Sign this base58-encoded transaction with your wallet and submit it.',
               }, null, 2),
             }],
           }
@@ -110,7 +110,7 @@ For BORROW positions: use lavarage_repay instead.
 
 Tip: call lavarage_close_quote first to preview PnL before closing.
 
-In "unsigned" mode: returns the unsigned transaction (base64) for you to sign and submit.
+In "unsigned" mode: returns the unsigned transaction (base58) for you to sign and submit.
 In "server-wallet" mode: signs and submits the transaction automatically, returns the tx signature.`,
     {
       positionAddress: z.string().describe('The on-chain position account address (base58)'),
@@ -187,7 +187,7 @@ function requireMode(mode: TradingMode | null): TradingMode {
 }
 
 async function signAndSubmitViaPrivy(
-  transactionBase64: string,
+  transactionBase58: string,
   walletAddress: string,
   config: ServerConfig,
 ): Promise<string> {
@@ -197,7 +197,9 @@ async function signAndSubmitViaPrivy(
 
   const privyClient = await getPrivyClient(config)
 
-  const txBuffer = Buffer.from(transactionBase64, 'base64')
+  // API returns base58-encoded transactions
+  const bs58 = await import('bs58')
+  const txBuffer = Buffer.from(bs58.default.decode(transactionBase58))
   const tx = VersionedTransaction.deserialize(txBuffer)
 
   // Timeout after 30 seconds to prevent infinite hangs
