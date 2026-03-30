@@ -261,14 +261,25 @@ async function signAndSubmitViaPrivy(
   const txBuffer = Buffer.from(transactionBase64, 'base64')
   const tx = VersionedTransaction.deserialize(txBuffer)
 
-  const { hash } = await privyClient.walletApi.solana.signAndSendTransaction({
-    address: walletAddress,
-    caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
-    chainType: 'solana',
-    transaction: tx,
-  })
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Privy signing timed out after 30s.')), 30_000),
+  )
 
-  return hash
+  try {
+    const result = await Promise.race([
+      privyClient.walletApi.solana.signAndSendTransaction({
+        address: walletAddress,
+        caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
+        chainType: 'solana',
+        transaction: tx,
+      }),
+      timeout,
+    ])
+    return result.hash
+  } catch (err: any) {
+    console.error(`Privy sign error for ${walletAddress}:`, err.message ?? err)
+    throw err
+  }
 }
 
 function formatError(err: any): string {
