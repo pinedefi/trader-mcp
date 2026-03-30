@@ -189,6 +189,104 @@ Includes MEV protection via Astralane.`,
       }
     },
   )
+
+  server.tool(
+    'lavarage_borrow',
+    `Borrow tokens against collateral on Lavarage. No directional bet — just access to liquidity.
+
+Use this when you want to borrow tokens without taking a leveraged position. For example:
+- Borrow USDC against your SOL (keep SOL exposure, get liquid USDC)
+- Borrow SOL against USDC
+- Borrow any supported token
+
+How it works:
+1. You deposit collateral (quote token: SOL or USDC)
+2. Lavarage lends you tokens from its lending pools
+3. You receive the borrowed tokens in your wallet
+4. Repay anytime with lavarage_repay or lavarage_partial_repay
+
+The leverage parameter controls your loan-to-value ratio:
+- 2x = borrow equal to your collateral (50% LTV)
+- 3x = borrow 2x your collateral (67% LTV)
+- Higher = more borrowed, closer to liquidation
+
+Preconditions: Must be authenticated + mode set. Need an offerPublicKey from lavarage_get_rates.
+Recommended: Call lavarage_get_rates to find borrow offers, then lavarage_get_quote to preview.
+
+Outputs:
+- server-wallet mode: returns { signature } — on-chain TX. Borrowed tokens are in your wallet.
+- unsigned mode: returns { transaction } — base58-encoded TX to sign externally.`,
+    {
+      offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates — look for BORROW side offers)'),
+      collateral: z.string().describe('Collateral in quote token: SOL (e.g. "0.5") or lamports. Values < 1000 = SOL.'),
+      leverage: z.number().min(1.1).max(10).describe('Borrow ratio — 2x = borrow equal to collateral, 3x = borrow 2x collateral'),
+      slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50)'),
+    },
+    async ({ offerPublicKey, collateral, leverage, slippageBps }) => {
+      try {
+        const mode = requireMode(getMode())
+        const wallet = getWallet()
+        const client = getClient()
+
+        const collateralAmount = toLamports(collateral)
+
+        // Safety guard
+        const collateralSol = Number(collateralAmount) / 1e9
+        if (collateralSol * leverage > config.maxPositionSol) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `BLOCKED: Borrow size (${collateralSol} SOL x ${leverage}x = ${(collateralSol * leverage).toFixed(1)} SOL) exceeds safety limit of ${config.maxPositionSol} SOL.`,
+            }],
+            isError: true,
+          }
+        }
+
+        const { tipLamports } = await client.getTipFloor()
+
+        const result = await client.buildOpenTx({
+          offerPublicKey,
+          userPublicKey: wallet,
+          collateralAmount,
+          leverage,
+          slippageBps,
+          astralaneTipLamports: tipLamports,
+        })
+
+        if (mode === 'unsigned') {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({
+                mode: 'unsigned',
+                transaction: result.transaction,
+                lastValidBlockHeight: result.lastValidBlockHeight,
+                message: 'Borrow transaction built. Sign and submit to receive borrowed tokens.',
+              }, null, 2),
+            }],
+          }
+        }
+
+        const txSig = await signAndSubmitViaPrivy(result.transaction, wallet, config)
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              mode: 'server-wallet',
+              signature: txSig,
+              message: `Borrow complete! Tokens are in your wallet. TX: ${txSig}. Use lavarage_repay when ready to return them.`,
+            }, null, 2),
+          }],
+        }
+      } catch (err: any) {
+        return {
+          content: [{ type: 'text' as const, text: formatError(err) }],
+          isError: true,
+        }
+      }
+    },
+  )
 }
 
 function requireMode(mode: TradingMode | null): TradingMode {

@@ -168,6 +168,29 @@ Includes MEV protection via Astralane.`,
   }),
 }
 
+export const borrow: ToolDefinition = {
+  name: 'lavarage_borrow',
+  description: `Borrow tokens against collateral on Lavarage. No directional bet — just access to liquidity.
+
+Use this when you want to borrow tokens without taking a leveraged position. For example:
+- Borrow USDC against your SOL (keep SOL exposure, get liquid USDC)
+- Borrow SOL against USDC
+- Borrow any supported token
+
+The leverage parameter controls your loan-to-value ratio:
+- 2x = borrow equal to your collateral (50% LTV)
+- 3x = borrow 2x your collateral (67% LTV)
+
+Preconditions: Must be authenticated + mode set. Need offerPublicKey from lavarage_get_rates.
+Repay anytime with lavarage_repay or lavarage_partial_repay.`,
+  schema: z.object({
+    offerPublicKey: z.string().describe('Offer/pool public key (look for BORROW offers in lavarage_get_rates)'),
+    collateral: z.string().describe('Collateral in quote token: SOL (e.g. "0.5") or lamports. Values < 1000 = SOL.'),
+    leverage: z.number().min(1.1).max(10).describe('Borrow ratio — 2x = borrow equal to collateral'),
+    slippageBps: z.number().optional().default(50).describe('Slippage in bps'),
+  }),
+}
+
 // ── Positions ──
 
 export const listPositions: ToolDefinition = {
@@ -424,7 +447,7 @@ Returns a MoonPay link pre-filled with the trader's wallet address.`,
 export const allTools: ToolDefinition[] = [
   login, setup,
   listTokens, getRates, getQuote, closeQuote,
-  openPosition, closePosition,
+  openPosition, closePosition, borrow,
   listPositions, getPosition,
   setTpSl, getOrders, cancelOrder,
   partialSell, repay, partialRepay, splitPosition, mergePositions,
