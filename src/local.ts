@@ -8,7 +8,7 @@
  *   LAVARAGE_API_URL=https://api.lavarage.xyz \
  *   LAVARAGE_API_KEY=your-key \
  *   LAVARAGE_KEYPAIR_PATH=~/.config/solana/id.json \
- *   npx @lavarage/trader-mcp --local
+ *   npx @lavarage-ai/trader-mcp --local
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'

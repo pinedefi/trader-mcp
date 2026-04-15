@@ -1,5 +1,5 @@
 {
-  "name": "@lavarage/trader-mcp",
+  "name": "@lavarage-ai/trader-mcp",
   "version": "0.1.0",
   "description": "Lavarage Trader MCP — hosted AI agent trading interface for Solana leveraged positions",
   "type": "module",
