@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { VersionedTransaction } from '@solana/web3.js'
+import { Keypair, VersionedTransaction } from '@solana/web3.js'
 import type { LavaApiClient } from '../api-client.js'
 import type { TradingMode } from '../session.js'
 import { getPrivyClient, type ServerConfig } from '../server.js'
@@ -12,7 +12,11 @@ export function registerTradeTools(
   getWallet: () => string,
   getMode: () => TradingMode | null,
   config: ServerConfig,
+  getLocalKeypair?: () => Keypair | null,
 ) {
+  const submitTx = (txBase58: string, wallet: string, mode: TradingMode) =>
+    submitTransaction(txBase58, wallet, mode, config, getLocalKeypair)
+
   server.tool(
     'lavarage_open_position',
     `Open a new leveraged trading position on Lavarage. THIS EXECUTES A REAL TRADE.
@@ -72,13 +76,13 @@ Warnings: Trades with MEV protection via Astralane. Fees deducted from collatera
           }
         }
 
-        const txSig = await signAndSubmitViaPrivy(result.transaction, wallet, config)
+        const txSig = await submitTx(result.transaction, wallet, mode)
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              mode: 'server-wallet',
+              mode,
               signature: txSig,
               message: `Position opened! TX: ${txSig}`,
             }, null, 2),
@@ -157,13 +161,13 @@ Includes MEV protection via Astralane.`,
           }
         }
 
-        const txSig = await signAndSubmitViaPrivy(result.transaction, wallet, config)
+        const txSig = await submitTx(result.transaction, wallet, mode)
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              mode: 'server-wallet',
+              mode,
               signature: txSig,
               message: `Position closed! TX: ${txSig}`,
             }, null, 2),
@@ -243,13 +247,13 @@ Outputs:
           }
         }
 
-        const txSig = await signAndSubmitViaPrivy(result.transaction, wallet, config)
+        const txSig = await submitTx(result.transaction, wallet, mode)
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              mode: 'server-wallet',
+              mode,
               signature: txSig,
               message: `Borrow complete! Tokens are in your wallet. TX: ${txSig}. Use lavarage_repay when ready to return them.`,
             }, null, 2),
@@ -270,6 +274,36 @@ function requireMode(mode: TradingMode | null): TradingMode {
     throw new Error('Trading mode not set. Call lavarage_setup first to choose "unsigned" or "server-wallet" mode.')
   }
   return mode
+}
+
+async function submitTransaction(
+  transactionBase58: string,
+  walletAddress: string,
+  mode: TradingMode,
+  config: ServerConfig,
+  getLocalKeypair?: () => Keypair | null,
+): Promise<string> {
+  if (mode === 'local') {
+    const keypair = getLocalKeypair?.()
+    if (!keypair) throw new Error('Local mode requires a loaded keypair.')
+    return signAndSubmitLocal(transactionBase58, keypair, config.solanaRpcUrl)
+  }
+  return signAndSubmitViaPrivy(transactionBase58, walletAddress, config)
+}
+
+async function signAndSubmitLocal(
+  transactionBase58: string,
+  keypair: Keypair,
+  rpcUrl: string,
+): Promise<string> {
+  const bs58 = await import('bs58')
+  const txBuffer = Buffer.from(bs58.default.decode(transactionBase58))
+  const tx = VersionedTransaction.deserialize(txBuffer)
+  tx.sign([keypair])
+
+  const { Connection } = await import('@solana/web3.js')
+  const conn = new Connection(rpcUrl, 'confirmed')
+  return conn.sendRawTransaction(tx.serialize(), { skipPreflight: true })
 }
 
 async function signAndSubmitViaPrivy(

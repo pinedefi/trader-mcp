@@ -19,7 +19,6 @@ import { resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { LavaApiClient } from './api-client.js'
 import { createSession } from './session.js'
-import { registerSetupTool } from './tools/setup.js'
 import { registerMarketTools } from './tools/market.js'
 import { registerPositionTools } from './tools/positions.js'
 import { registerTradeTools } from './tools/trade.js'
@@ -61,7 +60,7 @@ const sessionId = 'local'
 createSession(sessionId, {
   privyUserId: `local:${walletAddress}`,
   walletAddress,
-  mode: 'unsigned', // Local mode defaults to unsigned (user signs with their keypair)
+  mode: 'local', // Local mode: sign + submit with the loaded keypair, skipPreflight
   createdAt: new Date(),
 })
 
@@ -99,20 +98,22 @@ server.tool(
       text: JSON.stringify({
         status: 'authenticated',
         wallet: walletAddress,
-        mode: 'unsigned',
-        message: `Local mode — authenticated as ${walletAddress}. Transactions are returned unsigned for you to sign with your keypair.`,
+        mode: 'local',
+        message: `Local mode — authenticated as ${walletAddress}. Transactions are signed and submitted with the loaded keypair (skipPreflight).`,
       }, null, 2),
     }],
   }),
 )
 
-registerSetupTool(server, () => sessionId, false)
+const getLocalKeypair = () => keypair
+
+// No lavarage_setup in local mode — mode is fixed to 'local'
 registerMarketTools(server, getClient)
 registerPositionTools(server, getClient)
-registerTradeTools(server, getClient, () => walletAddress, () => 'unsigned', config)
+registerTradeTools(server, getClient, () => walletAddress, () => 'local', config, getLocalKeypair)
 registerOrderTools(server, getClient, config)
 registerHistoryTools(server, getClient)
-registerManageTools(server, getClient, () => walletAddress, () => 'unsigned', config)
+registerManageTools(server, getClient, () => walletAddress, () => 'local', config, getLocalKeypair)
 
 async function main() {
   const transport = new StdioServerTransport()

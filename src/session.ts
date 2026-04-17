@@ -5,7 +5,7 @@ import { timingSafeEqual } from 'node:crypto'
  * Each SSE connection gets its own session.
  */
 
-export type TradingMode = 'unsigned' | 'server-wallet'
+export type TradingMode = 'unsigned' | 'server-wallet' | 'local'
 
 export interface Session {
   privyUserId: string

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { VersionedTransaction } from '@solana/web3.js'
+import { Keypair, VersionedTransaction } from '@solana/web3.js'
 import type { LavaApiClient } from '../api-client.js'
 import type { TradingMode } from '../session.js'
 import { getPrivyClient, type ServerConfig } from '../server.js'
@@ -11,6 +11,7 @@ export function registerManageTools(
   getWallet: () => string,
   getMode: () => TradingMode | null,
   config: ServerConfig,
+  getLocalKeypair?: () => Keypair | null,
 ) {
   server.tool(
     'lavarage_partial_sell',
@@ -55,8 +56,7 @@ If the close step fails after the split succeeds, you will have two separate pos
           }
         }
 
-        // Server-wallet: sign all TXs via Privy, submit as Jito bundle
-        const privyClient = await getPrivyClient(config)
+        // Sign all TXs (Privy or local keypair), submit as Jito bundle
         const bs58mod = await import('bs58')
 
         // Build tip TX
@@ -81,32 +81,40 @@ If the close step fails after the split succeeds, you will have two separate pos
         const splitTx = VTX.deserialize(bs58mod.default.decode(result.splitTransaction))
         const closeTx = VTX.deserialize(bs58mod.default.decode(result.closeTransaction))
 
-        // Sign all 3 via Privy
-        const [signedTip, signedSplit, signedClose] = await Promise.all([
-          privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: tipTx }),
-          privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: splitTx }),
-          privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: closeTx }),
-        ])
+        const toBase64 = (tx: VersionedTransaction) =>
+          Buffer.from(tx.serialize()).toString('base64')
 
-        // Serialize signed TXs to base64 for bundle submission
-        const toBase64 = (signedResult: any) => {
-          const tx = signedResult.signedTransaction ?? signedResult.transaction ?? signedResult
-          const bytes = tx instanceof Uint8Array ? tx : tx.serialize()
-          return Buffer.from(bytes).toString('base64')
+        let tipB64: string, splitB64: string, closeB64: string
+        if (mode === 'local') {
+          const keypair = getLocalKeypair?.()
+          if (!keypair) throw new Error('Local mode requires a loaded keypair.')
+          tipTx.sign([keypair])
+          splitTx.sign([keypair])
+          closeTx.sign([keypair])
+          tipB64 = toBase64(tipTx)
+          splitB64 = toBase64(splitTx)
+          closeB64 = toBase64(closeTx)
+        } else {
+          const privyClient = await getPrivyClient(config)
+          const [signedTip, signedSplit, signedClose] = await Promise.all([
+            privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: tipTx }),
+            privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: splitTx }),
+            privyClient.walletApi.solana.signTransaction({ address: wallet, chainType: 'solana', transaction: closeTx }),
+          ])
+          const extract = (signedResult: any): VersionedTransaction =>
+            signedResult.signedTransaction ?? signedResult.transaction ?? signedResult
+          tipB64 = toBase64(extract(signedTip))
+          splitB64 = toBase64(extract(signedSplit))
+          closeB64 = toBase64(extract(signedClose))
         }
 
-        // Submit as Jito bundle
-        const bundleRes = await client.submitBundle([
-          toBase64(signedTip),
-          toBase64(signedSplit),
-          toBase64(signedClose),
-        ])
+        const bundleRes = await client.submitBundle([tipB64, splitB64, closeB64])
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              mode: 'server-wallet',
+              mode,
               bundleId: bundleRes.result,
               message: `Sold ${sellPercent}% of position via Jito bundle.`,
             }, null, 2),
@@ -141,7 +149,7 @@ In "server-wallet" mode: signs and submits automatically.`,
           userPublicKey: wallet,
         })
 
-        return handleTxResult(mode, result, 'Repay', wallet, config)
+        return handleTxResult(mode, result, 'Repay', wallet, config, getLocalKeypair)
       } catch (err: any) {
         return {
           content: [{ type: 'text' as const, text: formatError(err) }],
@@ -173,7 +181,7 @@ In "server-wallet" mode: signs and submits automatically.`,
           repaymentBps: repayPercent * 100,
         })
 
-        return handleTxResult(mode, result, 'Partial repay', wallet, config)
+        return handleTxResult(mode, result, 'Partial repay', wallet, config, getLocalKeypair)
       } catch (err: any) {
         return {
           content: [{ type: 'text' as const, text: formatError(err) }],
@@ -205,7 +213,7 @@ In "server-wallet" mode: signs and submits automatically.`,
           splitRatioBps: splitPercent * 100,
         })
 
-        return handleTxResult(mode, result, 'Split', wallet, config)
+        return handleTxResult(mode, result, 'Split', wallet, config, getLocalKeypair)
       } catch (err: any) {
         return {
           content: [{ type: 'text' as const, text: formatError(err) }],
@@ -237,7 +245,7 @@ In "server-wallet" mode: signs and submits automatically.`,
           userPublicKey: wallet,
         })
 
-        return handleTxResult(mode, result, 'Merge', wallet, config)
+        return handleTxResult(mode, result, 'Merge', wallet, config, getLocalKeypair)
       } catch (err: any) {
         return {
           content: [{ type: 'text' as const, text: formatError(err) }],
@@ -280,7 +288,7 @@ In "server-wallet" mode: signs and submits automatically.`,
           astralaneTipLamports: tipLamports,
         })
 
-        return handleTxResult(txMode, result, 'Increase borrow', wallet, config)
+        return handleTxResult(txMode, result, 'Increase borrow', wallet, config, getLocalKeypair)
       } catch (err: any) {
         return { content: [{ type: 'text' as const, text: formatError(err) }], isError: true }
       }
@@ -338,7 +346,7 @@ In "server-wallet" mode: signs and submits automatically.`,
           astralaneTipLamports: tipLamports,
         })
 
-        return handleTxResult(txMode, result, 'Add collateral', wallet, config)
+        return handleTxResult(txMode, result, 'Add collateral', wallet, config, getLocalKeypair)
       } catch (err: any) {
         return { content: [{ type: 'text' as const, text: formatError(err) }], isError: true }
       }
@@ -381,6 +389,7 @@ async function handleTxResult(
   action: string,
   wallet: string,
   config: ServerConfig,
+  getLocalKeypair?: () => Keypair | null,
 ) {
   if (mode === 'unsigned') {
     return {
@@ -396,17 +405,47 @@ async function handleTxResult(
     }
   }
 
-  const txSig = await signAndSubmitViaPrivy(result.transaction, wallet, config)
+  const txSig = await submitTransaction(result.transaction, wallet, mode, config, getLocalKeypair)
   return {
     content: [{
       type: 'text' as const,
       text: JSON.stringify({
-        mode: 'server-wallet',
+        mode,
         signature: txSig,
         message: `${action} complete! TX: ${txSig}`,
       }, null, 2),
     }],
   }
+}
+
+async function submitTransaction(
+  transactionBase58: string,
+  walletAddress: string,
+  mode: TradingMode,
+  config: ServerConfig,
+  getLocalKeypair?: () => Keypair | null,
+): Promise<string> {
+  if (mode === 'local') {
+    const keypair = getLocalKeypair?.()
+    if (!keypair) throw new Error('Local mode requires a loaded keypair.')
+    return signAndSubmitLocal(transactionBase58, keypair, config.solanaRpcUrl)
+  }
+  return signAndSubmitViaPrivy(transactionBase58, walletAddress, config)
+}
+
+async function signAndSubmitLocal(
+  transactionBase58: string,
+  keypair: Keypair,
+  rpcUrl: string,
+): Promise<string> {
+  const bs58 = await import('bs58')
+  const txBuffer = Buffer.from(bs58.default.decode(transactionBase58))
+  const tx = VersionedTransaction.deserialize(txBuffer)
+  tx.sign([keypair])
+
+  const { Connection } = await import('@solana/web3.js')
+  const conn = new Connection(rpcUrl, 'confirmed')
+  return conn.sendRawTransaction(tx.serialize(), { skipPreflight: true })
 }
 
 async function signAndSubmitViaPrivy(
