@@ -429,16 +429,26 @@ async function signAndSubmitViaPrivy(
   )
 
   try {
-    const result = await Promise.race([
-      privyClient.walletApi.solana.signAndSendTransaction({
+    const signed = await Promise.race([
+      privyClient.walletApi.solana.signTransaction({
         address: walletAddress,
-        caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
         chainType: 'solana',
         transaction: tx,
       }),
       timeout,
     ])
-    return result.hash
+
+    const signedTx: VersionedTransaction =
+      signed.signedTransaction ?? signed.transaction ?? signed
+    const rawBytes =
+      signedTx instanceof Uint8Array ? signedTx : signedTx.serialize()
+
+    const { Connection } = await import('@solana/web3.js')
+    const conn = new Connection(config.solanaRpcUrl, 'confirmed')
+    const signature = await conn.sendRawTransaction(rawBytes, {
+      skipPreflight: true,
+    })
+    return signature
   } catch (err: any) {
     console.error(`Privy sign error for ${walletAddress}:`, err.message ?? err)
     throw err
