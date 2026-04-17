@@ -140,7 +140,7 @@ export function renderLandingPage(publicUrl: string): string {
           <p>Run on your machine with your own Solana keypair. Full control.</p>
         </div>
         <div class="install-prompt" onclick="copyToClipboard(this)">
-          <span class="install-text">Install Lavarage MCP: run \`npm install -g @lavarage/trader-mcp\` then add a "lavarage" MCP server to the project MCP config with command "lavarage-trader-mcp-local" and env var LAVARAGE_KEYPAIR_PATH set to my Solana keypair file path (ask me where mine is). The API key and URL are built in — no configuration needed.</span>
+          <span class="install-text">Install Lavarage MCP: run \`npm install -g @lavarage-ai/trader-mcp\` then add a "lavarage" MCP server to the project MCP config with command "lavarage-trader-mcp-local" and env var LAVARAGE_KEYPAIR_PATH set to my Solana keypair file path (ask me where mine is). The API key and URL are built in — no configuration needed.</span>
           <span class="copy-btn" title="Click to copy">Copy</span>
         </div>
       </div>
@@ -227,7 +227,7 @@ export function renderLandingPage(publicUrl: string): string {
 
     <div class="footer">
       <p>Built by <a href="https://v2.lavarage.xyz">Lavarage</a> — Solana leveraged trading protocol</p>
-      <p style="margin-top: 0.5rem;"><a href="https://github.com/pinedefi/trader-mcp">GitHub</a> · <a href="https://docs.lavarage.xyz">API Docs</a></p>
+      <p style="margin-top: 0.5rem;"><a href="https://github.com/Lavarage-AI/trader-mcp">GitHub</a> · <a href="https://docs.lavarage.xyz">API Docs</a></p>
     </div>
   </div>
   <script>

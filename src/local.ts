@@ -8,7 +8,7 @@
  *   LAVARAGE_API_URL=https://api.lavarage.xyz \
  *   LAVARAGE_API_KEY=your-key \
  *   LAVARAGE_KEYPAIR_PATH=~/.config/solana/id.json \
- *   npx @lavarage/trader-mcp --local
+ *   npx @lavarage-ai/trader-mcp --local
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -30,7 +30,7 @@ import type { ServerConfig } from './server.js'
 
 // Default public API key — same one the web app uses. Not a secret.
 // Rate limiting is per-IP, positions are scoped by wallet.
-const DEFAULT_API_KEY = 'lv2_prod_f10d28b9ef5694e38b61eb614556ed85ab480585ef03c39c'
+const DEFAULT_API_KEY = '0590c5d8d17d1dc5aca3066db92d0ea0fde4ecb5a6b0fffff73bb36b224e'
 const DEFAULT_API_URL = 'https://api.lavarage.xyz'
 
 const API_URL = process.env.LAVARAGE_API_URL ?? DEFAULT_API_URL

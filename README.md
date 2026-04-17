@@ -1,4 +1,4 @@
-# @lavarage/trader-mcp
+# @lavarage-ai/trader-mcp
 
 Hosted MCP server for trading leveraged positions on [Lavarage](https://v2.lavarage.xyz) via AI agents (Claude, Cursor, GPT, custom agents).
 
@@ -28,7 +28,7 @@ Users choose their mode on first connection via the `lavarage_setup` tool.
 ## Setup
 
 ```bash
-git clone https://github.com/pinedefi/trader-mcp.git
+git clone https://github.com/Lavarage-AI/trader-mcp.git
 cd trader-mcp
 npm install
 cp .env.example .env  # edit with your keys
