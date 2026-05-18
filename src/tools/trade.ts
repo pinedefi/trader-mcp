@@ -29,21 +29,26 @@ Position types (determined by the offer):
 - SHORT: Price down = profit. Deposit base token, borrow, sell.
 - BORROW: No directional bet. Borrow tokens against collateral.
 
-Collateral = initial margin in quote token (SOL or USDC). 
+Collateral = initial margin in quote token (SOL or USDC).
 
 Outputs:
 - server-wallet mode: returns { signature } — the on-chain TX signature. Trade is done.
 - unsigned mode: returns { transaction } — base58-encoded TX to sign externally.
 - If position size exceeds safety limit: returns error (BLOCKED).
 
-Warnings: Trades with MEV protection via Astralane. Fees deducted from collateral.`,
+MEV protection:
+- In server-wallet mode, submits via Astralane (MEV-protected).
+- In unsigned mode, the returned transaction is MEV-protected only if astralaneTipLamports is set; otherwise it's a standard tx the caller must submit themselves.
+
+Fees deducted from collateral.`,
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
       collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
-      leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
+      leverage: z.number().min(1.1).max(100).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
+      astralaneTipLamports: z.number().min(10000).optional().describe('Optional Astralane MEV-protect tip in lamports (min 10000). When set, the built transaction includes a tip instruction; submit it via /api/v1/bundle/submit with mevProtect=true for MEV protection.'),
     },
-    async ({ offerPublicKey, collateral, leverage, slippageBps }) => {
+    async ({ offerPublicKey, collateral, leverage, slippageBps, astralaneTipLamports }) => {
       try {
         const mode = requireMode(getMode())
         const wallet = getWallet()
@@ -51,7 +56,15 @@ Warnings: Trades with MEV protection via Astralane. Fees deducted from collatera
 
         const collateralAmount = toSmallestUnits(collateral)
 
-        const { tipLamports } = await client.getTipFloor()
+        // In server-wallet/local mode the server submits via Astralane, so we
+        // always include a tip. In unsigned mode, only include a tip if the
+        // caller explicitly requested MEV protection.
+        let tipLamports: number | undefined
+        if (mode === 'unsigned') {
+          tipLamports = astralaneTipLamports
+        } else {
+          tipLamports = astralaneTipLamports ?? (await client.getTipFloor()).tipLamports
+        }
 
         const result = await client.buildOpenTx({
           offerPublicKey,
@@ -194,7 +207,7 @@ Use this when you want to borrow tokens without taking a leveraged position. For
 How it works:
 1. You deposit collateral (quote token: SOL or USDC)
 2. Lavarage lends you tokens from its lending pools
-3. You receive the borrowed tokens in your wallet
+3. Receives the borrowed quote tokens directly into your wallet for most offers. Some borrow offers route through a swap depending on the underlying liquidity path.
 4. Repay anytime with lavarage_repay or lavarage_partial_repay
 
 The leverage parameter controls your loan-to-value ratio:
@@ -211,7 +224,7 @@ Outputs:
     {
       offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates — look for BORROW side offers)'),
       collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
-      leverage: z.number().min(1.1).max(10).describe('Borrow ratio — 2x = borrow equal to collateral, 3x = borrow 2x collateral'),
+      leverage: z.number().min(1.1).max(100).describe('Borrow ratio — 2x = borrow equal to collateral, 3x = borrow 2x collateral'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50)'),
     },
     async ({ offerPublicKey, collateral, leverage, slippageBps }) => {

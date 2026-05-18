@@ -167,7 +167,7 @@ Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, sl
     {
       offerPublicKey: z.string().describe('Offer/pool public key — get this from lavarage_get_rates'),
       collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
-      leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
+      leverage: z.number().min(1.1).max(100).describe('Leverage multiplier (e.g. 3 for 3x)'),
       slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
     },
     async ({ offerPublicKey, collateral, leverage, slippageBps }) => {

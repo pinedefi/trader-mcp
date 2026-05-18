@@ -52,6 +52,8 @@ export const listTokens: ToolDefinition = {
   name: 'lavarage_list_tokens',
   description: `Search for tokens available on Lavarage. You MUST provide a search term — this tool does not dump all tokens.
 
+Search is required not because the API requires it (the underlying endpoint returns ~836 tokens with no params) but because dumping all of them would overflow the agent's context window.
+
 Returns tradeable tokens with their best offer, price, max leverage, and available liquidity. Use lavarage_get_rates for more detailed offer data.
 
 Examples: "SOL", "BONK", "JUP", "BTC", "cbBTC"`,
@@ -93,7 +95,7 @@ Key outputs: inAmount, outAmount (base tokens you'd receive), priceImpactPct, sl
   schema: z.object({
     offerPublicKey: z.string().describe('Offer/pool public key — get this from lavarage_get_rates'),
     collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
-    leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
+    leverage: z.number().min(1.1).max(100).describe('Leverage multiplier (e.g. 3 for 3x)'),
     slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
   }),
 }
@@ -134,12 +136,17 @@ Outputs:
 - unsigned mode: returns { transaction } — base58-encoded TX to sign externally.
 - If position size exceeds safety limit: returns error (BLOCKED).
 
-Warnings: Trades with MEV protection via Astralane. Fees deducted from collateral.`,
+MEV protection:
+- In server-wallet mode, submits via Astralane (MEV-protected).
+- In unsigned mode, the returned transaction is MEV-protected only if astralaneTipLamports is set; otherwise it's a standard tx the caller must submit themselves.
+
+Fees deducted from collateral.`,
   schema: z.object({
     offerPublicKey: z.string().describe('The offer/pool public key (get from lavarage_get_rates)'),
     collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). '),
-    leverage: z.number().min(1.1).max(10).describe('Leverage multiplier (e.g. 3 for 3x)'),
+    leverage: z.number().min(1.1).max(100).describe('Leverage multiplier (e.g. 3 for 3x)'),
     slippageBps: z.number().optional().default(50).describe('Slippage tolerance in bps (default: 50 = 0.5%)'),
+    astralaneTipLamports: z.number().min(10000).optional().describe('Optional Astralane MEV-protect tip in lamports (min 10000). When set, the built transaction includes a tip instruction; submit it via /api/v1/bundle/submit with mevProtect=true for MEV protection.'),
   }),
 }
 
@@ -177,6 +184,8 @@ Use this when you want to borrow tokens without taking a leveraged position. For
 - Borrow SOL against USDC
 - Borrow any supported token
 
+Receives the borrowed quote tokens directly into your wallet for most offers. Some borrow offers route through a swap depending on the underlying liquidity path.
+
 The leverage parameter controls your loan-to-value ratio:
 - 2x = borrow equal to your collateral (50% LTV)
 - 3x = borrow 2x your collateral (67% LTV)
@@ -186,7 +195,7 @@ Repay anytime with lavarage_repay or lavarage_partial_repay.`,
   schema: z.object({
     offerPublicKey: z.string().describe('Offer/pool public key (look for BORROW offers in lavarage_get_rates)'),
     collateral: z.string().describe('Collateral amount. Two formats: with token name (e.g. "5 USDC", "0.05 SOL") or raw smallest units (e.g. "5000000"). If you include SOL/USDC/WSOL suffix, the amount is auto-converted. '),
-    leverage: z.number().min(1.1).max(10).describe('Borrow ratio — 2x = borrow equal to collateral'),
+    leverage: z.number().min(1.1).max(100).describe('Borrow ratio — 2x = borrow equal to collateral'),
     slippageBps: z.number().optional().default(50).describe('Slippage in bps'),
   }),
 }
@@ -363,15 +372,17 @@ Preconditions: Must be authenticated.`,
 
 export const addCollateral: ToolDefinition = {
   name: 'lavarage_add_collateral',
-  description: `Add more of the traded token (base token) to an existing position. Reduces LTV and moves liquidation price further away.
+  description: `Adds the COLLATERAL token to your position. Reduces LTV and moves liquidation price further away.
 
-IMPORTANT: This adds the BASE token (the token you're long on), NOT the quote token.
-For example, on a WBTC/USDC position, you add WBTC (in satoshis). You must hold the base token in your wallet.
+For LONG, this is the base token you're long on (e.g., adding more SOL to a SOL LONG).
+For SHORT, this is the quote token (e.g., adding USDC to a WETH SHORT).
 
-Preconditions: Must be authenticated + mode set. Must hold the base token.`,
+You must hold the relevant collateral token in your wallet. Amount is in the token's smallest units (e.g. satoshis for BTC, lamports for SOL, micro-units for USDC).
+
+Preconditions: Must be authenticated + mode set. Must hold the collateral token.`,
   schema: z.object({
     positionAddress: z.string().describe('The position account address (base58)'),
-    collateralAmount: z.string().describe('Amount of base token to add, in smallest units (e.g. satoshis for WBTC)'),
+    collateralAmount: z.string().describe('Amount of collateral token to add, in smallest units. For LONG, this is the base token (e.g. satoshis for WBTC). For SHORT, this is the quote token (e.g. micro-USDC).'),
   }),
 }
 

@@ -320,19 +320,19 @@ In "server-wallet" mode: signs and submits automatically.`,
 
   server.tool(
     'lavarage_add_collateral',
-    `Add more of the traded token (base token) to an existing position. This reduces LTV and moves the liquidation price further away, making the position safer.
+    `Adds the COLLATERAL token to your position. Reduces LTV and moves liquidation price further away, making the position safer.
 
-IMPORTANT: This adds the BASE token (the token you're long on), NOT the quote token.
-For example, on a WBTC/USDC position, you add WBTC (in satoshis). On a cbBTC/SOL position, you add cbBTC.
-You must hold the base token in your wallet. Check lavarage_wallet_balance first.
+For LONG, this is the base token you're long on (e.g., adding more SOL to a SOL LONG).
+For SHORT, this is the quote token (e.g., adding USDC to a WETH SHORT).
 
-Amount is in the base token's smallest units (e.g. satoshis for BTC tokens, lamports for SOL).
+You must hold the relevant collateral token in your wallet. Check lavarage_wallet_balance first.
+Amount is in the token's smallest units (e.g. satoshis for BTC tokens, lamports for SOL, micro-units for USDC).
 
 In "unsigned" mode: returns unsigned transaction.
 In "server-wallet" mode: signs and submits automatically.`,
     {
       positionAddress: z.string().describe('The position account address (base58)'),
-      collateralAmount: z.string().describe('Amount of base token to add, in smallest units (e.g. satoshis for WBTC)'),
+      collateralAmount: z.string().describe('Amount of collateral token to add, in smallest units. For LONG, this is the base token (e.g. satoshis for WBTC). For SHORT, this is the quote token (e.g. micro-USDC).'),
     },
     async ({ positionAddress, collateralAmount }) => {
       try {
