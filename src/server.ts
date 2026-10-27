@@ -117,6 +117,28 @@ export async function startServer(config: ServerConfig) {
   // Dynamic Client Registration (RFC 7591)
   app.post('/register', (req, res) => {
     const { client_name, redirect_uris } = req.body
+    // SECURITY (LAV-2241): require explicit, well-formed redirect_uris. Registration
+    // stays open (MCP clients self-register), but a client may only ever be redirected
+    // to a URI it declared here — enforced again at /authorize. https only, except
+    // http://localhost / 127.0.0.1 for local MCP clients (e.g. Claude Code callbacks).
+    if (!Array.isArray(redirect_uris) || redirect_uris.length === 0) {
+      res.status(400).json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris is required and must be a non-empty array' })
+      return
+    }
+    for (const uri of redirect_uris) {
+      let u: URL
+      try {
+        u = new URL(uri)
+      } catch {
+        res.status(400).json({ error: 'invalid_redirect_uri', error_description: `invalid redirect_uri: ${uri}` })
+        return
+      }
+      const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1'
+      if (u.protocol !== 'https:' && !(u.protocol === 'http:' && isLocal)) {
+        res.status(400).json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must use https (or http://localhost for local clients)' })
+        return
+      }
+    }
     const client = registerClient(client_name, redirect_uris)
     res.status(201).json({
       client_id: client.clientId,
@@ -150,6 +172,16 @@ export async function startServer(config: ServerConfig) {
     const client = getOAuthClient(client_id)
     if (!client) {
       res.status(400).json({ error: 'invalid_client' })
+      return
+    }
+
+    // SECURITY (LAV-2241): the requested redirect_uri MUST exactly match one the client
+    // registered. Previously any redirect_uri was accepted and echoed back with a live
+    // authorization code attached — letting an attacker exfiltrate a victim's code (and
+    // the resulting 24h trading token) to an arbitrary URL. Reject (do NOT redirect) on
+    // mismatch so no code is ever issued to an unregistered target.
+    if (!client.redirectUris.includes(redirect_uri)) {
+      res.status(400).json({ error: 'invalid_request', error_description: 'redirect_uri does not match a registered redirect URI for this client' })
       return
     }
 
